@@ -1,12 +1,5 @@
-import OpenAI from 'openai'
 import type { CapabilityReport, GenerateReportInput } from '@/types'
-
-// ─── Client ──────────────────────────────────────────────────────────────────
-
-const getClient = () => {
-  if (!process.env.OPENAI_API_KEY) return null
-  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-}
+import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -48,10 +41,10 @@ OUTPUT REQUIREMENTS:
 export async function generateCapabilityReport(
   input: GenerateReportInput
 ): Promise<CapabilityReport> {
-  const client = getClient()
+  const client = getGeminiClient()
 
   if (!client) {
-    console.log('[AI Service] No OpenAI key — returning mock data')
+    console.log('[AI Service] No Gemini key — returning mock data')
     return getMockReport()
   }
 
@@ -61,30 +54,28 @@ export async function generateCapabilityReport(
   const timeout = setTimeout(() => controller.abort(), 55_000) // 55s — leaves buffer before Vercel's 60s limit
 
   try {
-    const response = await client.chat.completions.create(
-      {
-        model: 'gpt-4o',
+    const response = await client.models.generateContent({
+      model: getGeminiModel(),
+      contents: userPrompt,
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
         temperature: 0.7,
-        max_tokens: 4000,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
+        maxOutputTokens: 4000,
+        responseMimeType: 'application/json',
+        abortSignal: controller.signal,
       },
-      { signal: controller.signal }
-    )
+    })
     clearTimeout(timeout)
 
-    const content = response.choices[0].message.content
-    if (!content) throw new Error('Empty response from OpenAI')
+    const content = response.text
+    if (!content) throw new Error('Empty response from Gemini')
 
     const parsed = JSON.parse(content) as CapabilityReport
     return parsed
   } catch (err: any) {
     clearTimeout(timeout)
     if (err.name === 'AbortError' || err.message?.includes('abort')) {
-      console.error('[AI Service] OpenAI request timed out after 55s — falling back to mock')
+      console.error('[AI Service] Gemini request timed out after 55s — falling back to mock')
     } else {
       console.error('[AI Service] Generation failed:', err)
     }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
 import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
+import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
 
 // 20 messages per user per hour
 const RATE_LIMIT = 20
@@ -116,14 +116,17 @@ export async function POST(req: NextRequest) {
       content: message.trim(),
     })
 
-    // Check for OpenAI key — return helpful fallback if missing
-    if (!process.env.OPENAI_API_KEY) {
+    // Check for Gemini key — return helpful fallback if missing
+    if (!process.env.GEMINI_API_KEY) {
       const fallback = `I can see you're working toward becoming a ${topPathway?.title || 'career changer'}. Based on your profile, your strongest asset is your ${(report?.core_capabilities_json?.[0]?.title) || 'capability set'}. What specific obstacle are you hitting right now?`
       await supabase.from('coach_messages').insert({ user_id: user.id, role: 'assistant', content: fallback })
       return NextResponse.json({ message: fallback })
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    const client = getGeminiClient()
+    if (!client) {
+      return NextResponse.json({ error: 'AI service unavailable' }, { status: 503 })
+    }
 
     const systemPrompt = buildSystemPrompt({
       name: userData?.name || 'there',
@@ -136,20 +139,22 @@ export async function POST(req: NextRequest) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30_000)
 
-    const stream = await openai.chat.completions.create(
-      {
-        model: 'gpt-4o',
+    const stream = await client.models.generateContentStream({
+      model: getGeminiModel(),
+      contents: [
+        ...historyMessages.map(m => ({
+          role: m.role === 'assistant' ? 'model' as const : 'user' as const,
+          parts: [{ text: m.content }],
+        })),
+        { role: 'user', parts: [{ text: message.trim() }] },
+      ],
+      config: {
+        systemInstruction: systemPrompt,
         temperature: 0.75,
-        max_tokens: 500,
-        stream: true,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          ...historyMessages,
-          { role: 'user', content: message.trim() },
-        ],
+        maxOutputTokens: 500,
+        abortSignal: controller.signal,
       },
-      { signal: controller.signal }
-    )
+    })
 
     let assistantMessage = ''
 
@@ -157,7 +162,7 @@ export async function POST(req: NextRequest) {
       async start(streamController) {
         try {
           for await (const chunk of stream) {
-            const text = chunk.choices[0]?.delta?.content || ''
+            const text = chunk.text ?? ''
             if (text) {
               assistantMessage += text
               streamController.enqueue(new TextEncoder().encode(text))

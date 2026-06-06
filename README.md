@@ -113,7 +113,7 @@ Then fill in these values:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-OPENAI_API_KEY=sk-your-key-here          # Optional — see mock data section
+GEMINI_API_KEY=your-key-here             # Optional — see mock data section
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
@@ -153,28 +153,29 @@ It contains:
 
 ## How Mock Data Works
 
-If `OPENAI_API_KEY` is not set in `.env.local`, the app automatically returns the mock teacher demo profile. This means:
+If `GEMINI_API_KEY` is not set in `.env.local`, the app automatically returns the mock teacher demo profile. This means:
 
 - The full UI can be built, tested, and demoed without any API costs
 - The mock data represents the "teacher wanting a career change" demo specified in the build requirements
 - Pathways shown: Learning Designer, Customer Success Manager, Product Manager, Training Consultant, Operations Coordinator
-- To test with real AI, simply add an `OPENAI_API_KEY` to `.env.local`
+- To test with real AI, simply add a `GEMINI_API_KEY` to `.env.local`
 
 **To test the demo profile flow:**
-1. Leave `OPENAI_API_KEY` unset
+1. Leave `GEMINI_API_KEY` unset
 2. Create an account, upload any CV (or skip), complete questionnaire
 3. The system returns the high-quality mock profile
 
 ---
 
-## OpenAI Configuration
+## Gemini Configuration
 
-- Model: `gpt-4o` (best quality for this use case)
-- Cost per generation: approximately $0.02–0.05 depending on CV length
-- Response format: `json_object` (structured output mode)
-- To use a cheaper model during development, set `OPENAI_MODEL=gpt-4o-mini` in `.env.local` and update `ai-service.ts`
+- Model: `gemini-2.0-flash` (default; override with `GEMINI_MODEL` in `.env.local`)
+- API key: [Google AI Studio](https://aistudio.google.com/apikey)
+- Profile generation uses JSON mode (`responseMimeType: application/json`)
+- Coach chat uses streaming via `generateContentStream`
+- Gemini Flash is typically lower cost than GPT-4o for development and production
 
-The system prompt is designed specifically for GPT-4o. It may need adjustment for other models.
+The system prompt was originally written for GPT-4o. Minor prompt tuning may help if JSON output is occasionally malformed.
 
 ---
 
@@ -360,7 +361,7 @@ Every feature decision should be filtered through one question: *Does this help 
 | Database | Supabase (PostgreSQL) |
 | Auth | Supabase Auth |
 | Storage | Supabase Storage |
-| AI | OpenAI GPT-4o |
+| AI | Google Gemini |
 | Deployment | Vercel |
 
 ---

@@ -25,7 +25,7 @@ create policy "Users can update own data" on public.users for update using (auth
 create table if not exists public.profiles (
   id                 uuid primary key default uuid_generate_v4(),
   user_id            uuid not null references public.users(id) on delete cascade,
-  current_role       text,
+  "current_role"     text,
   experience_range   text,
   situation          text,
   city               text,
