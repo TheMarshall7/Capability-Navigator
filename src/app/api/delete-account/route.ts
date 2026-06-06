@@ -13,10 +13,11 @@ export async function DELETE() {
 
     // Delete all user data from public schema first
     // (Most cascades via ON DELETE CASCADE, but being explicit)
-    await supabase.from('mentor_feedback').delete().in(
-      'share_link_id',
-      supabase.from('share_links').select('id').eq('user_id', user.id)
-    )
+    const { data: shareLinks } = await supabase.from('share_links').select('id').eq('user_id', user.id)
+    const shareLinkIds = (shareLinks || []).map(sl => sl.id)
+    if (shareLinkIds.length) {
+      await supabase.from('mentor_feedback').delete().in('share_link_id', shareLinkIds)
+    }
     await supabase.from('share_links').delete().eq('user_id', user.id)
     await supabase.from('feedback').delete().eq('user_id', user.id)
     await supabase.from('career_pathways').delete().eq('user_id', user.id)

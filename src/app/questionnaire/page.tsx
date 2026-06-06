@@ -52,8 +52,8 @@ const SECTIONS = [
 type Answers = Record<string, string | string[] | number>
 
 function Field({ q, val, onChange }: { q: typeof SECTIONS[0]['qs'][0]; val: any; onChange: (v: any) => void }) {
-  if (q.t === 'text') return <Input placeholder={q.ph} value={val || ''} onChange={e => onChange(e.target.value)} />
-  if (q.t === 'area') return <Textarea placeholder={q.ph} value={val || ''} onChange={e => onChange(e.target.value)} />
+  if (q.t === 'text') return <Input placeholder={'ph' in q ? q.ph : undefined} value={val || ''} onChange={e => onChange(e.target.value)} />
+  if (q.t === 'area') return <Textarea placeholder={'ph' in q ? q.ph : undefined} value={val || ''} onChange={e => onChange(e.target.value)} />
   if (q.t === 'radio') return (
     <div className="flex flex-col gap-2">
       {q.opts!.map(o => (

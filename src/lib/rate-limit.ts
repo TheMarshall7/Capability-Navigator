@@ -21,9 +21,9 @@ function cleanStore() {
   const now = Date.now()
   if (now - lastClean < 60_000) return
   lastClean = now
-  for (const [key, entry] of store) {
+  store.forEach((entry, key) => {
     if (now > entry.resetAt) store.delete(key)
-  }
+  })
 }
 
 export interface RateLimitResult {

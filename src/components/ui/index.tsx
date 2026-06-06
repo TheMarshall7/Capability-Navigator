@@ -1,5 +1,5 @@
 'use client'
-import { type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react'
 import { clsx } from 'clsx'
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -48,10 +48,11 @@ export function Btn({ variant = 'primary', size = 'md', loading, children, class
 }
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
-export function Card({ children, className, onClick }: { children: ReactNode; className?: string; onClick?: () => void }) {
+export function Card({ children, className, onClick, style }: { children: ReactNode; className?: string; onClick?: () => void; style?: CSSProperties }) {
   return (
     <div
       onClick={onClick}
+      style={style}
       className={clsx('bg-white border border-[#E8E3DA] rounded-2xl p-6', onClick && 'cursor-pointer hover:shadow-sm transition-shadow', className)}
     >
       {children}
