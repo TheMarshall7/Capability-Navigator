@@ -330,17 +330,20 @@ Add environment variables in Vercel dashboard under Project Settings → Environ
 
 ### Cloudflare Pages
 
-This app uses server-side rendering and API routes, so it cannot be deployed with plain `npx next build` and output directory `out`. Use the Cloudflare Next.js adapter instead.
+This app uses server-side rendering and API routes. **Do not use `npx next build`** — that only creates a `.next/` folder, not the `.vercel/output/static` directory Cloudflare expects.
 
-In **Cloudflare Pages → Settings → Build & deployments**:
+Your build log shows `Executing user command: npx next build`. That will always fail with *Output directory ".vercel/output/static" not found* until you change the build command.
 
-| Setting | Value |
-|---------|-------|
-| Build command | `npm run pages:build` |
-| Build output directory | `.vercel/output/static` |
-| Node.js version | 22 (or 20+) |
+In **Cloudflare Pages → Settings → Build & deployments → Build configuration → Edit**:
 
-Ensure `wrangler.toml` is present in the repo (it sets `nodejs_compat` and `pages_build_output_dir`).
+| Setting | Wrong (current) | Correct |
+|---------|-----------------|---------|
+| Framework preset | Next.js (Static HTML Export) | Next.js — or None |
+| **Build command** | `npx next build` | **`npm run pages:build`** |
+| **Build output directory** | `out` or blank | **`.vercel/output/static`** |
+| Node.js version | — | 22 (or 20+) |
+
+`wrangler.toml` in this repo sets `pages_build_output_dir` but **does not set the build command** — you must update that in the dashboard.
 
 Add these environment variables for **Production** and **Preview** (build + runtime):
 
