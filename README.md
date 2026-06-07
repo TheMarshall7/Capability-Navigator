@@ -328,6 +328,32 @@ vercel
 
 Add environment variables in Vercel dashboard under Project Settings → Environment Variables.
 
+### Cloudflare Pages
+
+This app uses server-side rendering and API routes, so it cannot be deployed with plain `npx next build` and output directory `out`. Use the Cloudflare Next.js adapter instead.
+
+In **Cloudflare Pages → Settings → Build & deployments**:
+
+| Setting | Value |
+|---------|-------|
+| Build command | `npm run pages:build` |
+| Build output directory | `.vercel/output/static` |
+| Node.js version | 22 (or 20+) |
+
+Ensure `wrangler.toml` is present in the repo (it sets `nodejs_compat` and `pages_build_output_dir`).
+
+Add these environment variables for **Production** and **Preview** (build + runtime):
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_APP_URL` (your Pages URL, e.g. `https://your-project.pages.dev`)
+- `SUPABASE_SERVICE_ROLE_KEY` (server-only)
+- `GEMINI_API_KEY` (optional — mock data used if missing)
+
+In Supabase → Authentication → URL configuration, add your production callback URL:
+
+`https://YOUR-PAGES-URL/api/auth/callback`
+
 ### Self-hosted
 
 ```bash
@@ -362,7 +388,7 @@ Every feature decision should be filtered through one question: *Does this help 
 | Auth | Supabase Auth |
 | Storage | Supabase Storage |
 | AI | Google Gemini |
-| Deployment | Vercel |
+| Deployment | Vercel or Cloudflare Pages |
 
 ---
 

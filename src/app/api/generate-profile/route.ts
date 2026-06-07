@@ -1,3 +1,5 @@
+export const runtime = 'edge'
+
 import { NextRequest, NextResponse } from 'next/server'
 import { generateCapabilityReport } from '@/lib/ai-service'
 import { createClient } from '@/lib/supabase-server'
