@@ -344,6 +344,19 @@ npm install -g vercel
 vercel
 ```
 
+### Cloudflare Pages
+
+The **`next build` in your log succeeded** — the failure is only the output folder. Cloudflare is looking for `out` (static export), but this app needs the Cloudflare adapter output at **`.vercel/output/static`**.
+
+After pulling latest `main`, `wrangler.toml` sets the correct output directory. In **Cloudflare → Settings → Build**:
+
+| Setting | Value |
+|---------|-------|
+| **Build command** | `npx next build` *(shim auto-runs adapter on CF)* or `npm run pages:build` |
+| **Build output directory** | **Leave blank** or set to `.vercel/output/static` — **not `out`** |
+
+Add the same Supabase/Gemini env vars as Vercel. Set `NEXT_PUBLIC_APP_URL` to your `*.pages.dev` URL.
+
 ### Self-hosted
 
 ```bash
@@ -378,7 +391,7 @@ Every feature decision should be filtered through one question: *Does this help 
 | Auth | Supabase Auth |
 | Storage | Supabase Storage |
 | AI | Google Gemini |
-| Deployment | Vercel |
+| Deployment | Vercel or Cloudflare Pages |
 
 ---
 
