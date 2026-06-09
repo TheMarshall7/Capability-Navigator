@@ -7,39 +7,62 @@ import { Badge } from '@/components/ui/Badge'
 import type { Roadmap } from '@/types'
 import MilestoneList from './MilestoneList'
 
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string')
+}
+
+function normalizeRoadmap(raw: unknown): Roadmap {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Partial<Roadmap>
+  return {
+    startingPoint: typeof r.startingPoint === 'string' ? r.startingPoint : '',
+    targetCareer: typeof r.targetCareer === 'string' ? r.targetCareer : '',
+    existingStrengths: asStringArray(r.existingStrengths),
+    skillGaps: asStringArray(r.skillGaps),
+    suggestedLearning: asStringArray(r.suggestedLearning),
+    portfolioEvidence: asStringArray(r.portfolioEvidence),
+    entryRoutes: asStringArray(r.entryRoutes),
+    jobSearchTerms: asStringArray(r.jobSearchTerms),
+    firstThreeActions: asStringArray(r.firstThreeActions),
+    threeMonthPlan: asStringArray(r.threeMonthPlan),
+    sixMonthPlan: asStringArray(r.sixMonthPlan),
+    twelveMonthPlan: asStringArray(r.twelveMonthPlan),
+  }
+}
+
+function RoadmapSection({ title, items, accentColor }: { title: string; items?: string[]; accentColor: string }) {
+  if (!items?.length) return null
+  return (
+    <div className="mb-5">
+      <div className="text-xs font-bold tracking-widest mb-3" style={{ color: accentColor }}>{title}</div>
+      <div className="flex flex-col gap-2">
+        {items.map((item, i) => (
+          <div key={i} className="flex gap-3 p-3 rounded-xl text-sm leading-relaxed"
+            style={{ background: accentColor === '#3D8A7A' ? '#EBF5F3' : accentColor === '#E07A5F' ? '#FDF0EA' : '#F8F6F1' }}>
+            <span style={{ color: accentColor, flexShrink: 0 }}>→</span>
+            <span className="text-[#7A756F]">{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default async function RoadmapPage({ params }: { params: { pathwayId: string } }) {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const { data: pathway } = await supabase
+  const { data: pathway, error } = await supabase
     .from('career_pathways')
     .select('*')
     .eq('id', params.pathwayId)
     .eq('user_id', user.id)
-    .single()
+    .maybeSingle()
 
-  if (!pathway) notFound()
+  if (error || !pathway) notFound()
 
-  const r: Roadmap = pathway.roadmap_json || {}
-
-  const Section = ({ title, items, accentColor }: { title: string; items?: string[]; accentColor: string }) => {
-    if (!items?.length) return null
-    return (
-      <div className="mb-5">
-        <div className="text-xs font-bold tracking-widest mb-3" style={{ color: accentColor }}>{title}</div>
-        <div className="flex flex-col gap-2">
-          {items.map((item, i) => (
-            <div key={i} className="flex gap-3 p-3 rounded-xl text-sm leading-relaxed"
-              style={{ background: accentColor === '#3D8A7A' ? '#EBF5F3' : accentColor === '#E07A5F' ? '#FDF0EA' : '#F8F6F1' }}>
-              <span style={{ color: accentColor, flexShrink: 0 }}>→</span>
-              <span className="text-[#7A756F]">{item}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-    )
-  }
+  const r = normalizeRoadmap(pathway.roadmap_json)
 
   return (
     <div className="max-w-[780px] mx-auto px-6 py-10">
@@ -78,9 +101,9 @@ export default async function RoadmapPage({ params }: { params: { pathwayId: str
       </div>
 
       <Card className="mb-5">
-        <Section title="SUGGESTED LEARNING" items={r.suggestedLearning} accentColor="#3D8A7A" />
-        <Section title="PORTFOLIO EVIDENCE" items={r.portfolioEvidence} accentColor="#7C6AF0" />
-        <Section title="YOUR FIRST 3 ACTIONS" items={r.firstThreeActions} accentColor="#E07A5F" />
+        <RoadmapSection title="SUGGESTED LEARNING" items={r.suggestedLearning} accentColor="#3D8A7A" />
+        <RoadmapSection title="PORTFOLIO EVIDENCE" items={r.portfolioEvidence} accentColor="#7C6AF0" />
+        <RoadmapSection title="YOUR FIRST 3 ACTIONS" items={r.firstThreeActions} accentColor="#E07A5F" />
       </Card>
 
       {/* Timeline */}
@@ -133,10 +156,10 @@ export default async function RoadmapPage({ params }: { params: { pathwayId: str
         <div className="text-xs font-bold tracking-widest text-[#2D2926] mb-4">RESOURCES</div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           {[['LinkedIn Jobs', '🔍'], ['Indeed', '🔍'], ['Reed', '🔍'], ['Coursera', '📚'], ['Udemy', '📚'], ['FutureLearn', '📚']].map(([name, icon]) => (
-            <a key={String(name)} href="#" onClick={e => e.preventDefault()}
-              className="flex items-center gap-2 px-4 py-3 bg-[#F8F6F1] border border-[#E8E3DA] rounded-xl text-sm font-medium text-[#2D2926] no-underline hover:bg-white transition-colors">
+            <div key={String(name)}
+              className="flex items-center gap-2 px-4 py-3 bg-[#F8F6F1] border border-[#E8E3DA] rounded-xl text-sm font-medium text-[#2D2926]">
               <span>{icon}</span><span>{name}</span>
-            </a>
+            </div>
           ))}
         </div>
       </Card>
