@@ -52,6 +52,23 @@ NEVER:
 - Pretend you know things you don't — say so if you're uncertain`
 }
 
+function buildFallbackReply(data: {
+  topPathway: any
+  report: any
+}): string {
+  const { topPathway, report } = data
+  return `I can see you're working toward becoming a ${topPathway?.title || 'career changer'}. Based on your profile, your strongest asset is your ${(report?.core_capabilities_json?.[0]?.title) || 'capability set'}. What specific obstacle are you hitting right now?`
+}
+
+function textStreamResponse(text: string, remaining: number): Response {
+  return new Response(text, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'X-RateLimit-Remaining': String(remaining),
+    },
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = createClient()
@@ -118,15 +135,25 @@ export async function POST(req: NextRequest) {
     })
 
     // Check for Gemini key — return helpful fallback if missing
+    const fallbackReply = buildFallbackReply({ topPathway, report: report || {} })
+
     if (!process.env.GEMINI_API_KEY) {
-      const fallback = `I can see you're working toward becoming a ${topPathway?.title || 'career changer'}. Based on your profile, your strongest asset is your ${(report?.core_capabilities_json?.[0]?.title) || 'capability set'}. What specific obstacle are you hitting right now?`
-      await supabase.from('coach_messages').insert({ user_id: user.id, role: 'assistant', content: fallback })
-      return NextResponse.json({ message: fallback })
+      await supabase.from('coach_messages').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: fallbackReply,
+      })
+      return textStreamResponse(fallbackReply, limit.remaining)
     }
 
     const client = getGeminiClient()
     if (!client) {
-      return NextResponse.json({ error: 'AI service unavailable' }, { status: 503 })
+      await supabase.from('coach_messages').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: fallbackReply,
+      })
+      return textStreamResponse(fallbackReply, limit.remaining)
     }
 
     const systemPrompt = buildSystemPrompt({
@@ -140,22 +167,34 @@ export async function POST(req: NextRequest) {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30_000)
 
-    const stream = await client.models.generateContentStream({
-      model: getGeminiModel(),
-      contents: [
-        ...historyMessages.map(m => ({
-          role: m.role === 'assistant' ? 'model' as const : 'user' as const,
-          parts: [{ text: m.content }],
-        })),
-        { role: 'user', parts: [{ text: message.trim() }] },
-      ],
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.75,
-        maxOutputTokens: 500,
-        abortSignal: controller.signal,
-      },
-    })
+    let stream
+    try {
+      stream = await client.models.generateContentStream({
+        model: getGeminiModel(),
+        contents: [
+          ...historyMessages.map(m => ({
+            role: m.role === 'assistant' ? 'model' as const : 'user' as const,
+            parts: [{ text: m.content }],
+          })),
+          { role: 'user', parts: [{ text: message.trim() }] },
+        ],
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.75,
+          maxOutputTokens: 500,
+          abortSignal: controller.signal,
+        },
+      })
+    } catch (err) {
+      clearTimeout(timeout)
+      console.error('[coach API] Gemini stream failed:', err)
+      await supabase.from('coach_messages').insert({
+        user_id: user.id,
+        role: 'assistant',
+        content: fallbackReply,
+      })
+      return textStreamResponse(fallbackReply, limit.remaining)
+    }
 
     let assistantMessage = ''
 
