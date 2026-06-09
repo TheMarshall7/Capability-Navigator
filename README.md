@@ -319,7 +319,7 @@ Do not build these into Version 1:
 
 ## Deploy
 
-### Vercel (recommended)
+### Vercel
 
 1. Connect the GitHub repo at [vercel.com/new](https://vercel.com/new)
 2. Leave **Build command** as `next build` (default)
@@ -328,9 +328,9 @@ Do not build these into Version 1:
 | Variable | Required |
 |----------|----------|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes — the **anon public** key (not service_role) |
 | `NEXT_PUBLIC_APP_URL` | Yes — your Vercel URL (e.g. `https://your-app.vercel.app`) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes — server-only |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes — **service_role secret**, server-only |
 | `GEMINI_API_KEY` | Optional — mock data used if missing |
 
 4. In Supabase → Authentication → URL configuration, add:
@@ -343,19 +343,6 @@ Or deploy from CLI:
 npm install -g vercel
 vercel
 ```
-
-### Cloudflare Pages
-
-The **`next build` in your log succeeded** — the failure is only the output folder. Cloudflare is looking for `out` (static export), but this app needs the Cloudflare adapter output at **`.vercel/output/static`**.
-
-After pulling latest `main`, `wrangler.toml` sets the correct output directory. In **Cloudflare → Settings → Build**:
-
-| Setting | Value |
-|---------|-------|
-| **Build command** | `npx next build` *(shim auto-runs adapter on CF)* or `npm run pages:build` |
-| **Build output directory** | **Leave blank** or set to `.vercel/output/static` — **not `out`** |
-
-Add the same Supabase/Gemini env vars as Vercel. Set `NEXT_PUBLIC_APP_URL` to your `*.pages.dev` URL.
 
 ### Self-hosted
 
@@ -391,7 +378,7 @@ Every feature decision should be filtered through one question: *Does this help 
 | Auth | Supabase Auth |
 | Storage | Supabase Storage |
 | AI | Google Gemini |
-| Deployment | Vercel or Cloudflare Pages |
+| Deployment | Vercel |
 
 ---
 
