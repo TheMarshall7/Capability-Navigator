@@ -1,5 +1,3 @@
-export const runtime = 'edge'
-
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(req: NextRequest) {
@@ -8,20 +6,30 @@ export async function POST(req: NextRequest) {
     const file = formData.get('file') as File | null
     if (!file) return NextResponse.json({ text: '' })
 
-    if (file.type === 'text/plain') {
-      return NextResponse.json({ text: (await file.text()).trim() })
+    const buffer = Buffer.from(await file.arrayBuffer())
+
+    if (file.type === 'application/pdf') {
+      try {
+        const pdfParse = (await import('pdf-parse')).default
+        const { text } = await pdfParse(buffer)
+        return NextResponse.json({ text: text.trim() })
+      } catch {
+        return NextResponse.json({ text: '[PDF uploaded — text extraction unavailable in this environment]' })
+      }
     }
 
-    // PDF/DOCX parsing needs Node.js (pdf-parse/mammoth) — unavailable on Cloudflare Edge.
-    // The upload page also supports pasting CV text directly.
-    if (
-      file.type === 'application/pdf' ||
-      file.type === 'application/msword' ||
-      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ) {
-      return NextResponse.json({
-        text: `[${file.name} uploaded — automatic text extraction is not available here. Use "Paste text" on the upload page, or upload a .txt file.]`,
-      })
+    if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      try {
+        const mammoth = await import('mammoth')
+        const { value: text } = await mammoth.extractRawText({ buffer })
+        return NextResponse.json({ text: text.trim() })
+      } catch {
+        return NextResponse.json({ text: '[Word document uploaded — text extraction unavailable in this environment]' })
+      }
+    }
+
+    if (file.type === 'text/plain') {
+      return NextResponse.json({ text: buffer.toString('utf-8').trim() })
     }
 
     return NextResponse.json({ text: `[${file.name} uploaded]` })

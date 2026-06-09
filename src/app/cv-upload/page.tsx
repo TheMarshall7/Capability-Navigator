@@ -2,7 +2,8 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
-import { Btn, Card } from '@/components/ui'
+import { Btn } from '@/components/ui/Btn'
+import { Card } from '@/components/ui/Card'
 
 export default function CVUploadPage() {
   const [mode, setMode] = useState<'upload' | 'paste'>('upload')

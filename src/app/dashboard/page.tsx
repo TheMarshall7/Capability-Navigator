@@ -2,10 +2,15 @@ export const runtime = 'edge'
 
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase-server'
-import { Card, Badge, ProgressBar, Btn } from '@/components/ui'
-import WeeklyStepWidget from './WeeklyStepWidget'
-import CareerVelocity from './CareerVelocity'
+import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import { Btn } from '@/components/ui/Btn'
+
+const CareerVelocity = dynamic(() => import('./CareerVelocity'))
+const WeeklyStepWidget = dynamic(() => import('./WeeklyStepWidget'))
 
 export default async function DashboardPage() {
   const supabase = createClient()

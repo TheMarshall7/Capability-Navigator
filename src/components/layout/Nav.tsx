@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
-import { Btn } from '@/components/ui'
+import { Btn } from '@/components/ui/Btn'
 import type { User } from '@supabase/supabase-js'
 
 const PROTECTED = ['/dashboard', '/cv-upload', '/questionnaire', '/generating', '/profile', '/pathways', '/roadmap', '/feedback', '/share', '/settings']

@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { Btn, Textarea } from '@/components/ui'
+import { Btn } from '@/components/ui/Btn'
+import { Textarea } from '@/components/ui/Textarea'
 
 export default function MentorFeedbackForm({ shareLinkId, name }: { shareLinkId: string; name: string }) {
   const [agreement, setAgreement] = useState('')

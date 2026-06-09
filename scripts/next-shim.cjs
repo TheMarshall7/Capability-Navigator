@@ -20,14 +20,25 @@ if (
   args[0] === 'build' &&
   !process.env.__CF_PAGES_INNER
 ) {
-  const result = spawnSync(
-    process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['@cloudflare/next-on-pages'],
-    {
-      stdio: 'inherit',
-      env: { ...process.env, __CF_PAGES_INNER: '1' },
-    }
+  const nopBin = path.join(
+    __dirname,
+    '..',
+    'node_modules',
+    '@cloudflare',
+    'next-on-pages',
+    'bin',
+    'index.js'
   )
+  const result = spawnSync(process.execPath, [nopBin], {
+    stdio: 'inherit',
+    env: {
+      ...process.env,
+      __CF_PAGES_INNER: '1',
+      NEXT_TELEMETRY_DISABLED: '1',
+      VERCEL_TELEMETRY_DISABLED: '1',
+      NODE_OPTIONS: process.env.NODE_OPTIONS || '--max-old-space-size=4096',
+    },
+  })
   process.exit(result.status ?? 1)
 }
 

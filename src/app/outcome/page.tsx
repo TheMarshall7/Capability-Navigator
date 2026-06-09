@@ -2,7 +2,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
-import { Btn, Card, Textarea } from '@/components/ui'
+import { Btn } from '@/components/ui/Btn'
+import { Card } from '@/components/ui/Card'
+import { Textarea } from '@/components/ui/Textarea'
 
 type MoveStatus = 'yes' | 'in_progress' | 'not_yet'
 type SalaryChange = 'increased' | 'same' | 'decreased' | 'unknown'

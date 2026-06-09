@@ -3,7 +3,8 @@ export const runtime = 'edge'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-server'
-import { Card, Badge } from '@/components/ui'
+import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
 
 function DifficultyDot({ d }: { d: string }) {
   const colors: Record<string, string> = { Low: '#3D8A7A', Medium: '#E8A838', High: '#E07A5F' }

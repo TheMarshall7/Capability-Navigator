@@ -1,6 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { Btn, CopyBlock } from '@/components/ui'
+import { Btn } from '@/components/ui/Btn'
+import { CopyBlock } from '@/components/ui/CopyBlock'
 
 const WEEKS = [
   { week: 1, phase: 'Identity', title: 'Rename what you do', action: 'Update your LinkedIn headline', detail: 'Change it to describe the capability you\'re moving toward — not the role you\'re leaving.', copy: 'Learning Designer | 8 Years Curriculum & Instructional Design | Open to L&D, EdTech & Corporate Training', copyLabel: 'PASTE THIS AS YOUR HEADLINE', why: 'Recruiters in your target field search daily. Your current headline makes you invisible to every one of them.', effort: '5 min', done: true },

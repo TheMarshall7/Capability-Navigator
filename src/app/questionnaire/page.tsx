@@ -2,7 +2,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
-import { Btn, Card, Input, Textarea, ProgressBar } from '@/components/ui'
+import { Btn } from '@/components/ui/Btn'
+import { Card } from '@/components/ui/Card'
+import { Input } from '@/components/ui/Input'
+import { Textarea } from '@/components/ui/Textarea'
+import { ProgressBar } from '@/components/ui/ProgressBar'
 
 const SECTIONS = [
   { title: 'Basic Career Context', qs: [

@@ -3,7 +3,9 @@ export const runtime = 'edge'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase-server'
-import { Card, Badge, Btn } from '@/components/ui'
+import { Card } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
+import { Btn } from '@/components/ui/Btn'
 import type { CoreCapability, HiddenStrength } from '@/types'
 
 export default async function ProfilePage() {
