@@ -321,41 +321,28 @@ Do not build these into Version 1:
 
 ### Vercel (recommended)
 
+1. Connect the GitHub repo at [vercel.com/new](https://vercel.com/new)
+2. Leave **Build command** as `next build` (default)
+3. Add these environment variables for **Production** and **Preview**:
+
+| Variable | Required |
+|----------|----------|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes |
+| `NEXT_PUBLIC_APP_URL` | Yes — your Vercel URL (e.g. `https://your-app.vercel.app`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes — server-only |
+| `GEMINI_API_KEY` | Optional — mock data used if missing |
+
+4. In Supabase → Authentication → URL configuration, add:
+
+`https://YOUR-VERCEL-URL/api/auth/callback`
+
+Or deploy from CLI:
+
 ```bash
 npm install -g vercel
 vercel
 ```
-
-Add environment variables in Vercel dashboard under Project Settings → Environment Variables.
-
-### Cloudflare Pages
-
-This app uses server-side rendering and API routes. **Do not use `npx next build`** — that only creates a `.next/` folder, not the `.vercel/output/static` directory Cloudflare expects.
-
-Your build log shows `Executing user command: npx next build`. That will always fail with *Output directory ".vercel/output/static" not found* until you change the build command.
-
-In **Cloudflare Pages → Settings → Build & deployments → Build configuration → Edit**:
-
-| Setting | Wrong (current) | Correct |
-|---------|-----------------|---------|
-| Framework preset | Next.js (Static HTML Export) | Next.js — or None |
-| **Build command** | `npx next build` | **`npm run pages:build`** |
-| **Build output directory** | `out` or blank | **`.vercel/output/static`** |
-| Node.js version | — | 22 (or 20+) |
-
-`wrangler.toml` in this repo sets `pages_build_output_dir` but **does not set the build command** — you must update that in the dashboard.
-
-Add these environment variables for **Production** and **Preview** (build + runtime):
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `NEXT_PUBLIC_APP_URL` (your Pages URL, e.g. `https://your-project.pages.dev`)
-- `SUPABASE_SERVICE_ROLE_KEY` (server-only)
-- `GEMINI_API_KEY` (optional — mock data used if missing)
-
-In Supabase → Authentication → URL configuration, add your production callback URL:
-
-`https://YOUR-PAGES-URL/api/auth/callback`
 
 ### Self-hosted
 
@@ -391,7 +378,7 @@ Every feature decision should be filtered through one question: *Does this help 
 | Auth | Supabase Auth |
 | Storage | Supabase Storage |
 | AI | Google Gemini |
-| Deployment | Vercel or Cloudflare Pages |
+| Deployment | Vercel |
 
 ---
 
