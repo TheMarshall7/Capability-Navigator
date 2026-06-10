@@ -190,8 +190,16 @@ Include ALL of these items (evaluate each honestly as passed or failed):
 14. "Top third is scannable: target title and strongest achievement visible"
 15. "Cover letter recommended for career-changers"
 
+=== OUTPUT LIMITS (required — keeps generation fast) ===
+- highlights: max 6 strong + 6 improve (not more)
+- sections: max 6 section assessments
+- reframing_opportunities: max 2
+- optimization_checklist: exactly 8 items
+- ats_risks: max 5 items
+- Keep all labels and assessments concise
+
 === DEPTH REQUIREMENTS ===
-- Minimum highlights: 8 strong + 8 improve for a typical CV (scale down only if CV is very short <400 chars: 3+3; <800 chars: 5+5).
+- Minimum highlights: 6 strong + 6 improve for a typical CV (scale down if CV is short <400 chars: 3+3; <800 chars: 4+4).
 - Cover ALL major sections present — do not cluster feedback on a single bullet.
 - Include at least one highlight per applicable category.
 - Each label: 2-3 sentences, specific and mentor-like.

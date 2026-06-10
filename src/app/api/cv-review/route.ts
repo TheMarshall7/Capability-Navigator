@@ -422,7 +422,6 @@ export async function POST(req: NextRequest) {
       console.warn('[cv-review] Unexpected jobDescription field; ignoring.')
     }
 
-    let parseAttempts = 0
     const result = await callGeminiJson(
       client,
       getGeminiModel(),
@@ -430,16 +429,13 @@ export async function POST(req: NextRequest) {
         systemInstruction: CV_REVIEW_SYSTEM_PROMPT,
         userPrompt,
         temperature: 0.45,
-        maxOutputTokens: 8192,
-        timeoutMs: 48_000,
-        totalTimeoutMs: 52_000,
-        maxAttempts: 2,
+        maxOutputTokens: 4096,
+        timeoutMs: 58_000,
+        totalTimeoutMs: 59_000,
+        maxAttempts: 1,
       },
-      (parsed) => {
-        parseAttempts++
-        return validateReview(parsed, cvText, hasPathway)
-          ?? (parseAttempts >= 2 ? validateReviewLenient(parsed, cvText, hasPathway) : null)
-      },
+      (parsed) => validateReview(parsed, cvText, hasPathway)
+        ?? validateReviewLenient(parsed, cvText, hasPathway),
       1,
     )
 

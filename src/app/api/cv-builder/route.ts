@@ -3,7 +3,10 @@ import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
 import { callGeminiJson, geminiJsonFailureMessage } from '@/lib/gemini-json'
-import { CV_BUILDER_SYSTEM_PROMPT } from '@/lib/prompts/cv-builder-system'
+import {
+  CV_BUILDER_CORE_PROMPT,
+  CV_BUILDER_SUPPLEMENT_PROMPT,
+} from '@/lib/prompts/cv-builder-system'
 import type {
   CvDraftContent,
   CvRegion,
@@ -24,6 +27,20 @@ const RATE_LIMIT = 3
 const WINDOW_MS = 60 * 60 * 1000
 const MAX_HISTORY_CHARS = 8_000
 const MAX_JD_CHARS = 4_000
+const ROUTE_BUDGET_MS = 58_000
+const PHASE1_TIMEOUT_MS = 36_000
+const PHASE2_TIMEOUT_MS = 20_000
+
+type CvDraftCore = Pick<
+  CvDraftContent,
+  | 'contact' | 'region_applied' | 'format' | 'headline' | 'summary' | 'core_skills'
+  | 'relevant_projects' | 'experience' | 'education' | 'skills' | 'gaps_addressed'
+>
+
+type CvDraftSupplement = Pick<
+  CvDraftContent,
+  'tailoring_notes' | 'reframing_examples' | 'keyword_mapping' | 'optimization_checklist' | 'cover_letter'
+>
 
 const VALID_REGIONS = new Set<CvRegion>(['UK', 'US', 'Canada', 'EU', 'Australia', 'International'])
 
@@ -151,7 +168,18 @@ function normalizeChecklist(val: unknown): CvChecklistItem[] {
     .filter(c => c.item)
 }
 
-function validateDraft(data: unknown): CvDraftContent | null {
+function parseCoreContact(d: Record<string, unknown>) {
+  const contactRaw = d.contact as Record<string, unknown> | null
+  return {
+    name: typeof contactRaw?.name === 'string' ? contactRaw.name.trim() : '',
+    location: typeof contactRaw?.location === 'string' ? contactRaw.location.trim() : '',
+    email: typeof contactRaw?.email === 'string' ? contactRaw.email.trim() : undefined,
+    phone: typeof contactRaw?.phone === 'string' ? contactRaw.phone.trim() : undefined,
+    linkedin: typeof contactRaw?.linkedin === 'string' ? contactRaw.linkedin.trim() : undefined,
+  }
+}
+
+function validateCoreDraft(data: unknown): CvDraftCore | null {
   if (!data || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
 
@@ -159,40 +187,13 @@ function validateDraft(data: unknown): CvDraftContent | null {
   const summary = typeof d.summary === 'string' ? d.summary.trim() : ''
   if (!headline && !summary) return null
 
-  const tailoringNotes = typeof d.tailoring_notes === 'string' ? d.tailoring_notes.trim() : 'Your experience was reframed using capability language for your target pathway.'
-  const coverLetterRaw = d.cover_letter as Record<string, unknown> | null
-  const cover_letter = {
-    opening: typeof coverLetterRaw?.opening === 'string' ? coverLetterRaw.opening.trim() : '',
-    body: typeof coverLetterRaw?.body === 'string' ? coverLetterRaw.body.trim() : '',
-    closing: typeof coverLetterRaw?.closing === 'string' ? coverLetterRaw.closing.trim() : '',
-  }
-  if (!cover_letter.opening) return null
-
-  const contactRaw = d.contact as Record<string, unknown> | null
-  const contact = {
-    name: typeof contactRaw?.name === 'string' ? contactRaw.name.trim() : '',
-    location: typeof contactRaw?.location === 'string' ? contactRaw.location.trim() : '',
-    email: typeof contactRaw?.email === 'string' ? contactRaw.email.trim() : undefined,
-    phone: typeof contactRaw?.phone === 'string' ? contactRaw.phone.trim() : undefined,
-    linkedin: typeof contactRaw?.linkedin === 'string' ? contactRaw.linkedin.trim() : undefined,
-  }
-
-  const regionRaw = typeof d.region_applied === 'string' ? d.region_applied as CvRegion : 'UK'
-  const region_applied = VALID_REGIONS.has(regionRaw) ? regionRaw : 'UK'
-
   const experience = normalizeExperience(d.experience)
   const core_skills = normalizeStringArray(d.core_skills)
-  const reframing_examples = normalizeReframing(d.reframing_examples)
-  const optimization_checklist = normalizeChecklist(d.optimization_checklist)
-
   const relevantRoles = experience.filter(e => e.tier === 'relevant')
-  if (relevantRoles.length === 0) return null
-  const mostRecentBullets = relevantRoles[0].bullets.length
-  if (mostRecentBullets < 2) return null
+  if (relevantRoles.length === 0 || relevantRoles[0].bullets.length < 2) return null
   if (core_skills.length < 4) return null
-  if (reframing_examples.length < 1) return null
-  if (optimization_checklist.length < 5) return null
 
+  const regionRaw = typeof d.region_applied === 'string' ? d.region_applied as CvRegion : 'UK'
   const skillsRaw = d.skills as Record<string, unknown> | null
   const skills = {
     core: normalizeStringArray(skillsRaw?.core),
@@ -201,8 +202,8 @@ function validateDraft(data: unknown): CvDraftContent | null {
   if (skills.core.length === 0) skills.core = core_skills.slice(0, 6)
 
   return {
-    contact,
-    region_applied,
+    contact: parseCoreContact(d),
+    region_applied: VALID_REGIONS.has(regionRaw) ? regionRaw : 'UK',
     format: 'hybrid',
     headline: headline || 'Career professional open to new opportunities',
     summary: summary || 'Experienced professional with transferable skills ready for a new pathway.',
@@ -212,10 +213,72 @@ function validateDraft(data: unknown): CvDraftContent | null {
     education: normalizeEducation(d.education),
     skills,
     gaps_addressed: normalizeGaps(d.gaps_addressed),
-    tailoring_notes: tailoringNotes,
-    reframing_examples,
+  }
+}
+
+function validateCoreLenient(data: unknown): CvDraftCore | null {
+  if (!data || typeof data !== 'object') return null
+  const d = data as Record<string, unknown>
+
+  const headline = typeof d.headline === 'string' ? d.headline.trim() : ''
+  const summary = typeof d.summary === 'string' ? d.summary.trim() : ''
+  if (!headline && !summary) return null
+
+  let experience = normalizeExperience(d.experience)
+  if (experience.length === 0) return null
+  experience = experience.map((e, i) => ({
+    ...e,
+    tier: e.tier || (i === 0 ? 'relevant' as const : 'additional' as const),
+    bullets: e.bullets.length > 0 ? e.bullets : ['Contributed to team objectives and delivered on key responsibilities.'],
+  }))
+
+  const core_skills = normalizeStringArray(d.core_skills)
+  const regionRaw = typeof d.region_applied === 'string' ? d.region_applied as CvRegion : 'UK'
+  const skillsRaw = d.skills as Record<string, unknown> | null
+  const skills = {
+    core: normalizeStringArray(skillsRaw?.core).length > 0
+      ? normalizeStringArray(skillsRaw?.core)
+      : core_skills.slice(0, 6),
+    developing: normalizeStringArray(skillsRaw?.developing),
+  }
+
+  return {
+    contact: parseCoreContact(d),
+    region_applied: VALID_REGIONS.has(regionRaw) ? regionRaw : 'UK',
+    format: 'hybrid',
+    headline: headline || 'Career professional open to new opportunities',
+    summary: summary || 'Experienced professional with transferable skills ready for a new pathway.',
+    core_skills: core_skills.length >= 2 ? core_skills : skills.core.slice(0, 6),
+    relevant_projects: normalizeProjects(d.relevant_projects),
+    experience,
+    education: normalizeEducation(d.education),
+    skills,
+    gaps_addressed: normalizeGaps(d.gaps_addressed),
+  }
+}
+
+function validateSupplement(data: unknown): CvDraftSupplement | null {
+  if (!data || typeof data !== 'object') return null
+  const d = data as Record<string, unknown>
+
+  const coverLetterRaw = d.cover_letter as Record<string, unknown> | null
+  const cover_letter = {
+    opening: typeof coverLetterRaw?.opening === 'string' ? coverLetterRaw.opening.trim() : '',
+    body: typeof coverLetterRaw?.body === 'string' ? coverLetterRaw.body.trim() : '',
+    closing: typeof coverLetterRaw?.closing === 'string' ? coverLetterRaw.closing.trim() : '',
+  }
+  if (!cover_letter.opening) return null
+
+  const checklist = normalizeChecklist(d.optimization_checklist)
+  if (checklist.length < 5) return null
+
+  return {
+    tailoring_notes: typeof d.tailoring_notes === 'string' && d.tailoring_notes.trim()
+      ? d.tailoring_notes.trim()
+      : 'Your experience was reframed using capability language for your target pathway.',
+    reframing_examples: normalizeReframing(d.reframing_examples),
     keyword_mapping: normalizeKeywordMapping(d.keyword_mapping),
-    optimization_checklist,
+    optimization_checklist: checklist,
     cover_letter,
   }
 }
@@ -228,77 +291,42 @@ const DEFAULT_CHECKLIST: CvChecklistItem[] = [
   { item: 'Bullets start with strong action verbs', passed: false, note: 'Some bullets may need strengthening' },
 ]
 
-/** Accepts thinner AI output on final attempt to avoid timeout retry loops. */
-function validateDraftLenient(data: unknown): CvDraftContent | null {
-  if (!data || typeof data !== 'object') return null
-  const d = data as Record<string, unknown>
-
-  const headline = typeof d.headline === 'string' ? d.headline.trim() : ''
-  const summary = typeof d.summary === 'string' ? d.summary.trim() : ''
-  if (!headline && !summary) return null
-
-  let experience = normalizeExperience(d.experience)
-  if (experience.length === 0) return null
-
-  // Ensure at least one role has bullets
-  experience = experience.map((e, i) => ({
-    ...e,
-    tier: e.tier || (i === 0 ? 'relevant' as const : 'additional' as const),
-    bullets: e.bullets.length > 0 ? e.bullets : ['Contributed to team objectives and delivered on key responsibilities.'],
-  }))
-
-  const coverLetterRaw = d.cover_letter as Record<string, unknown> | null
-  const cover_letter = {
-    opening: typeof coverLetterRaw?.opening === 'string' && coverLetterRaw.opening.trim()
-      ? coverLetterRaw.opening.trim()
-      : `I am writing to express my interest in transitioning into a new field, bringing transferable experience from my previous career.`,
-    body: typeof coverLetterRaw?.body === 'string' ? coverLetterRaw.body.trim() : '',
-    closing: typeof coverLetterRaw?.closing === 'string' ? coverLetterRaw.closing.trim() : '',
-  }
-
-  const contactRaw = d.contact as Record<string, unknown> | null
-  const contact = {
-    name: typeof contactRaw?.name === 'string' ? contactRaw.name.trim() : '',
-    location: typeof contactRaw?.location === 'string' ? contactRaw.location.trim() : '',
-    email: typeof contactRaw?.email === 'string' ? contactRaw.email.trim() : undefined,
-    phone: typeof contactRaw?.phone === 'string' ? contactRaw.phone.trim() : undefined,
-    linkedin: typeof contactRaw?.linkedin === 'string' ? contactRaw.linkedin.trim() : undefined,
-  }
-
-  const regionRaw = typeof d.region_applied === 'string' ? d.region_applied as CvRegion : 'UK'
-  const region_applied = VALID_REGIONS.has(regionRaw) ? regionRaw : 'UK'
-  const core_skills = normalizeStringArray(d.core_skills)
-  const skillsRaw = d.skills as Record<string, unknown> | null
-  const skills = {
-    core: normalizeStringArray(skillsRaw?.core).length > 0
-      ? normalizeStringArray(skillsRaw?.core)
-      : core_skills.slice(0, 6),
-    developing: normalizeStringArray(skillsRaw?.developing),
-  }
-
-  const checklist = normalizeChecklist(d.optimization_checklist)
-  const optimization_checklist = checklist.length >= 5 ? checklist : DEFAULT_CHECKLIST
-
+function defaultSupplement(targetRole: string): CvDraftSupplement {
   return {
-    contact,
-    region_applied,
-    format: 'hybrid',
-    headline: headline || 'Career professional open to new opportunities',
-    summary: summary || 'Experienced professional with transferable skills ready for a new pathway.',
-    core_skills: core_skills.length >= 2 ? core_skills : skills.core.slice(0, 6),
-    relevant_projects: normalizeProjects(d.relevant_projects),
-    experience,
-    education: normalizeEducation(d.education),
-    skills,
-    gaps_addressed: normalizeGaps(d.gaps_addressed),
-    tailoring_notes: typeof d.tailoring_notes === 'string' && d.tailoring_notes.trim()
-      ? d.tailoring_notes.trim()
-      : 'Your experience was reframed using capability language for your target pathway.',
-    reframing_examples: normalizeReframing(d.reframing_examples),
-    keyword_mapping: normalizeKeywordMapping(d.keyword_mapping),
-    optimization_checklist,
-    cover_letter,
+    tailoring_notes: 'Your experience was reframed using capability language for your target pathway.',
+    reframing_examples: [],
+    keyword_mapping: [],
+    optimization_checklist: DEFAULT_CHECKLIST,
+    cover_letter: {
+      opening: `I am applying for ${targetRole} roles, bringing transferable experience from my previous career and a deliberate investment in this transition.`,
+      body: '',
+      closing: 'I would welcome the opportunity to discuss how my background translates to your team.',
+    },
   }
+}
+
+function buildSupplementUserPrompt(
+  core: CvDraftCore,
+  data: { pathwayTitle: string; targetRole: string; jobDescription?: string },
+): string {
+  const expSummary = core.experience
+    .map(e => `- ${e.title} at ${e.company} (${e.dates}): ${e.bullets.slice(0, 2).join(' ')}`)
+    .join('\n')
+  const jdSection = data.jobDescription
+    ? `\nJOB DESCRIPTION (mirror keywords in keyword_mapping where truthful):\n${data.jobDescription}\n`
+    : '\nNo job description provided — return keyword_mapping as empty array.\n'
+
+  return `TARGET PATHWAY: ${data.pathwayTitle}
+TARGET ROLE: ${data.targetRole}
+${jdSection}
+GENERATED CV TO SUPPLEMENT:
+Headline: ${core.headline}
+Summary: ${core.summary}
+Core skills: ${core.core_skills.join(', ')}
+Experience:
+${expSummary}
+
+Write tailoring_notes, 2 reframing_examples, 8-item optimization_checklist, cover_letter, and keyword_mapping.`
 }
 
 function buildUserPrompt(data: {
@@ -447,33 +475,73 @@ export async function POST(req: NextRequest) {
       missingSkills: pathway.missing_skills_json || [],
     })
 
-    const result = await callGeminiJson(
+    const routeStarted = Date.now()
+
+    const coreResult = await callGeminiJson(
       client,
       getGeminiModel(),
       {
-        systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
+        systemInstruction: CV_BUILDER_CORE_PROMPT,
         userPrompt,
         temperature: 0.5,
-        maxOutputTokens: 6144,
-        timeoutMs: 58_000,
-        totalTimeoutMs: 59_000,
+        maxOutputTokens: 4096,
+        timeoutMs: PHASE1_TIMEOUT_MS,
+        totalTimeoutMs: PHASE1_TIMEOUT_MS,
         maxAttempts: 1,
       },
-      (raw) => validateDraft(raw) ?? validateDraftLenient(raw),
+      (raw) => validateCoreDraft(raw) ?? validateCoreLenient(raw),
       1,
     )
 
-    if (!result.ok) {
-      if (result.detail) console.error('[cv-builder] Gemini failure:', result.detail)
-      const status = result.failure === 'timeout' ? 504 : result.failure === 'api_key' ? 503 : 502
+    if (!coreResult.ok) {
+      if (coreResult.detail) console.error('[cv-builder] Core phase failure:', coreResult.detail)
+      const status = coreResult.failure === 'timeout' ? 504 : coreResult.failure === 'api_key' ? 503 : 502
       return NextResponse.json(
-        { error: geminiJsonFailureMessage(result.failure, result.detail) },
+        { error: geminiJsonFailureMessage(coreResult.failure, coreResult.detail) },
         { status },
       )
     }
 
+    const roleLabel = targetRole || pathway.title
+    let supplement = defaultSupplement(roleLabel)
+    const phase2Budget = ROUTE_BUDGET_MS - (Date.now() - routeStarted) - 1_000
+
+    if (phase2Budget >= 8_000) {
+      const supplementPrompt = buildSupplementUserPrompt(coreResult.data, {
+        pathwayTitle: pathway.title,
+        targetRole: roleLabel,
+        jobDescription: jobDescription ? jobDescription.slice(0, MAX_JD_CHARS) : undefined,
+      })
+      const phase2Timeout = Math.min(PHASE2_TIMEOUT_MS, phase2Budget)
+
+      const supplementResult = await callGeminiJson(
+        client,
+        getGeminiModel(),
+        {
+          systemInstruction: CV_BUILDER_SUPPLEMENT_PROMPT,
+          userPrompt: supplementPrompt,
+          temperature: 0.5,
+          maxOutputTokens: 2048,
+          timeoutMs: phase2Timeout,
+          totalTimeoutMs: phase2Timeout,
+          maxAttempts: 1,
+        },
+        (raw) => validateSupplement(raw) ?? defaultSupplement(roleLabel),
+        1,
+      )
+
+      if (supplementResult.ok) {
+        supplement = supplementResult.data
+      } else {
+        console.warn('[cv-builder] Supplement phase failed, using defaults:', supplementResult.detail)
+      }
+    } else {
+      console.warn('[cv-builder] Skipping supplement phase — insufficient time budget')
+    }
+
     const draft: CvDraftContent = {
-      ...result.data,
+      ...coreResult.data,
+      ...supplement,
       _inputs: {
         name,
         location,
