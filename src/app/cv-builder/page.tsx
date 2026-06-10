@@ -42,6 +42,15 @@ function WarningBanner({ message }: { message: string }) {
   )
 }
 
+function isMissingDraftsTable(err: { code?: string; message?: string }) {
+  return (
+    err.code === '42P01' ||
+    err.code === 'PGRST205' ||
+    err.message?.includes('cv_drafts') ||
+    err.message?.toLowerCase().includes('does not exist')
+  )
+}
+
 function isValidDraft(data: unknown): data is CvDraftContent {
   if (!data || typeof data !== 'object') return false
   const d = data as CvDraftContent
@@ -80,7 +89,7 @@ function CVBuilderContent() {
   const [confirmRegenerate, setConfirmRegenerate] = useState(false)
   const [initKey, setInitKey] = useState(0)
 
-  const loadDraftForPathway = useCallback(async (userId: string, pid: string) => {
+  const loadDraftForPathway = useCallback(async (userId: string, pid: string): Promise<{ found: boolean; warning?: string }> => {
     const { data, error: draftError } = await supabase
       .from('cv_drafts')
       .select('content_json')
@@ -89,12 +98,15 @@ function CVBuilderContent() {
       .maybeSingle()
 
     if (draftError) {
-      const isMissingTable = draftError.code === '42P01' || draftError.message?.includes('cv_drafts')
-      throw new Error(
-        isMissingTable
-          ? 'Could not load saved drafts — run migration 004_cv_drafts.sql in Supabase.'
-          : 'Could not load your saved CV draft. Please try again.',
-      )
+      console.warn('[cv-builder] Draft load failed:', draftError)
+      setDraft(null)
+      setViewMode('input')
+      return {
+        found: false,
+        warning: isMissingDraftsTable(draftError)
+          ? 'Draft saving is not set up yet — run migration 004_cv_drafts.sql in Supabase. You can still build a CV below; it just won\'t be saved between visits.'
+          : 'Could not load your saved draft. You can still build a new CV below.',
+      }
     }
 
     if (data?.content_json && isValidDraft(data.content_json)) {
@@ -107,7 +119,7 @@ function CVBuilderContent() {
         setTargetRole(content._inputs.targetRole)
         setHistoryText(content._inputs.historyText)
       }
-      return true
+      return { found: true }
     }
 
     if (data?.content_json) {
@@ -116,7 +128,7 @@ function CVBuilderContent() {
 
     setDraft(null)
     setViewMode('input')
-    return false
+    return { found: false }
   }, [supabase])
 
   const applyPrefill = useCallback((
@@ -202,7 +214,10 @@ function CVBuilderContent() {
         const cvText = cvData?.extracted_text || ''
         applyPrefill(userData?.name || '', city, cvText, selected)
 
-        await loadDraftForPathway(user.id, selected.id)
+        const draftResult = await loadDraftForPathway(user.id, selected.id)
+        if (draftResult.warning && !cancelled) {
+          setWarning(draftResult.warning)
+        }
       } catch (err: unknown) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : 'Failed to load CV Builder. Please try again.')
@@ -233,8 +248,9 @@ function CVBuilderContent() {
         return
       }
 
-      const hasDraft = await loadDraftForPathway(user.id, newId)
-      if (!hasDraft && pathway) {
+      const draftResult = await loadDraftForPathway(user.id, newId)
+      if (draftResult.warning) setWarning(draftResult.warning)
+      if (!draftResult.found && pathway) {
         setTargetRole(pathway.title)
       }
     } catch (err: unknown) {
