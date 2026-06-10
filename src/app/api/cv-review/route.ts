@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
-import { callGeminiJson } from '@/lib/gemini-json'
+import { callGeminiJson, geminiJsonFailureMessage } from '@/lib/gemini-json'
 
 export const maxDuration = 60
 
@@ -70,19 +70,6 @@ function normalizeHighlights(data: unknown): CvHighlight[] {
     .filter(h => h.quote.length >= 5 && h.label.length > 0)
 }
 
-function geminiFailureMessage(failure: 'timeout' | 'empty' | 'parse' | 'api'): string {
-  switch (failure) {
-    case 'timeout':
-      return 'Review timed out. Please try again with a shorter CV.'
-    case 'empty':
-      return 'The AI returned an empty response. Please try again.'
-    case 'parse':
-      return 'The AI returned an invalid response. Please try again.'
-    case 'api':
-      return 'AI service error. Please try again in a moment.'
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const supabase = createClient()
@@ -138,9 +125,9 @@ export async function POST(req: NextRequest) {
     )
 
     if (!result.ok) {
-      const status = result.failure === 'timeout' ? 504 : 502
+      const status = result.failure === 'timeout' ? 504 : result.failure === 'api_key' ? 503 : 502
       return NextResponse.json(
-        { error: geminiFailureMessage(result.failure) },
+        { error: geminiJsonFailureMessage(result.failure) },
         { status },
       )
     }

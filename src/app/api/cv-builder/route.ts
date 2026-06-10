@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
-import { callGeminiJson } from '@/lib/gemini-json'
+import { callGeminiJson, geminiJsonFailureMessage } from '@/lib/gemini-json'
 
 export const maxDuration = 60
 
@@ -172,19 +172,6 @@ WORK HISTORY (raw — reframe using capability language for the target pathway):
 ${data.historyText}`
 }
 
-function geminiFailureMessage(failure: 'timeout' | 'empty' | 'parse' | 'api'): string {
-  switch (failure) {
-    case 'timeout':
-      return 'CV generation timed out. Please try again with shorter history text.'
-    case 'parse':
-      return 'The AI returned an invalid response. Please try again.'
-    case 'empty':
-      return 'The AI returned an empty response. Please try again.'
-    case 'api':
-      return 'AI service error. Please try again in a moment.'
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     const supabase = createClient()
@@ -267,7 +254,7 @@ export async function POST(req: NextRequest) {
       location: (typeof location === 'string' ? location : '').trim(),
       targetRole: (typeof targetRole === 'string' ? targetRole : '').trim() || pathway.title,
       historyText: historyText.trim().slice(0, MAX_HISTORY_CHARS),
-      reportSummary: report.summary,
+      reportSummary: report.summary || 'No capability summary available.',
       coreCapabilities: report.core_capabilities_json || [],
       hiddenStrengths: report.hidden_strengths_json || [],
       pathwayTitle: pathway.title,
@@ -282,16 +269,16 @@ export async function POST(req: NextRequest) {
         systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
         userPrompt,
         temperature: 0.5,
-        maxOutputTokens: 8192,
-        timeoutMs: 55_000,
+        maxOutputTokens: 4096,
+        timeoutMs: 25_000,
       },
       validateDraft,
     )
 
     if (!result.ok) {
-      const status = result.failure === 'timeout' ? 504 : 502
+      const status = result.failure === 'timeout' ? 504 : result.failure === 'api_key' ? 503 : 502
       return NextResponse.json(
-        { error: geminiFailureMessage(result.failure) },
+        { error: geminiJsonFailureMessage(result.failure) },
         { status },
       )
     }
