@@ -2,15 +2,28 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
+import { callGeminiJson } from '@/lib/gemini-json'
+
+export const maxDuration = 60
 
 const RATE_LIMIT = 3
 const WINDOW_MS = 60 * 60 * 1000
-const TIMEOUT_MS = 55_000
 const MAX_HISTORY_CHARS = 12_000
 
 const CV_BUILDER_SYSTEM_PROMPT = `You are a CV writer for Capability Navigator — a career transition platform.
 
 Your job: rewrite the user's work history so it speaks the language of their target pathway. People already have the skills — their CV just describes them in the wrong dialect. You translate.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "headline": "string",
+  "summary": "string",
+  "experience": [
+    { "company": "string", "title": "string", "dates": "string", "bullets": ["string"] }
+  ],
+  "skills": { "core": ["string"], "developing": ["string"] },
+  "tailoring_notes": "string"
+}
 
 RULES:
 - Reframe every piece of experience using capability language (e.g. lesson planning → curriculum design, parent evenings → stakeholder management).
@@ -24,37 +37,6 @@ RULES:
 
 CRITICAL — NEVER FABRICATE:
 Never fabricate employers, dates, titles, qualifications, or metrics — if the input lacks a number, the output must not invent one. Honest reframing, not fiction.`
-
-const RESPONSE_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    headline: { type: 'STRING' },
-    summary: { type: 'STRING' },
-    experience: {
-      type: 'ARRAY',
-      items: {
-        type: 'OBJECT',
-        properties: {
-          company: { type: 'STRING' },
-          title: { type: 'STRING' },
-          dates: { type: 'STRING' },
-          bullets: { type: 'ARRAY', items: { type: 'STRING' } },
-        },
-        required: ['company', 'title', 'dates', 'bullets'],
-      },
-    },
-    skills: {
-      type: 'OBJECT',
-      properties: {
-        core: { type: 'ARRAY', items: { type: 'STRING' } },
-        developing: { type: 'ARRAY', items: { type: 'STRING' } },
-      },
-      required: ['core', 'developing'],
-    },
-    tailoring_notes: { type: 'STRING' },
-  },
-  required: ['headline', 'summary', 'experience', 'skills', 'tailoring_notes'],
-}
 
 export interface CvDraftExperience {
   company: string
@@ -75,13 +57,6 @@ export interface CvDraftContent {
     targetRole: string
     historyText: string
   }
-}
-
-function parseJsonContent(content: string): unknown {
-  const trimmed = content.trim()
-  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i)
-  const jsonStr = fenceMatch ? fenceMatch[1].trim() : trimmed
-  return JSON.parse(jsonStr)
 }
 
 function normalizeParsedDraft(data: unknown): Record<string, unknown> | null {
@@ -127,16 +102,20 @@ function validateDraft(data: unknown): CvDraftContent | null {
   const normalized = normalizeParsedDraft(data)
   if (!normalized) return null
 
-  if (typeof normalized.headline !== 'string' || !normalized.headline.trim()) return null
-  if (typeof normalized.summary !== 'string' || !normalized.summary.trim()) return null
-  if (typeof normalized.tailoring_notes !== 'string' || !normalized.tailoring_notes.trim()) return null
+  const headline = typeof normalized.headline === 'string' ? normalized.headline.trim() : ''
+  const summary = typeof normalized.summary === 'string' ? normalized.summary.trim() : ''
+  const tailoringNotes = typeof normalized.tailoring_notes === 'string'
+    ? normalized.tailoring_notes.trim()
+    : ''
+
+  if (!headline && !summary) return null
 
   const skills = normalized.skills as { core: unknown[]; developing: unknown[] }
   const experience = normalized.experience as CvDraftExperience[]
 
   return {
-    headline: normalized.headline.trim(),
-    summary: normalized.summary.trim(),
+    headline: headline || 'Career professional open to new opportunities',
+    summary: summary || 'Experienced professional with transferable skills ready for a new pathway.',
     experience: experience.map(e => ({
       company: e.company,
       title: e.title,
@@ -147,7 +126,7 @@ function validateDraft(data: unknown): CvDraftContent | null {
       core: skills.core.map(s => String(s).trim()).filter(Boolean),
       developing: skills.developing.map(s => String(s).trim()).filter(Boolean),
     },
-    tailoring_notes: (normalized.tailoring_notes as string).trim(),
+    tailoring_notes: tailoringNotes || 'Your experience was reframed using capability language for your target pathway.',
   }
 }
 
@@ -193,68 +172,16 @@ WORK HISTORY (raw — reframe using capability language for the target pathway):
 ${data.historyText}`
 }
 
-type GeminiFailure = 'timeout' | 'parse' | 'validation' | 'empty'
-
-async function callGemini(
-  client: NonNullable<ReturnType<typeof getGeminiClient>>,
-  userPrompt: string,
-): Promise<{ draft: CvDraftContent | null; failure?: GeminiFailure }> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
-
-  try {
-    const response = await client.models.generateContent({
-      model: getGeminiModel(),
-      contents: userPrompt,
-      config: {
-        systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
-        temperature: 0.5,
-        maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
-        responseSchema: RESPONSE_SCHEMA,
-        abortSignal: controller.signal,
-      },
-    })
-    clearTimeout(timeout)
-
-    const content = response.text
-    if (!content) return { draft: null, failure: 'empty' }
-
-    let parsed: unknown
-    try {
-      parsed = parseJsonContent(content)
-    } catch (parseErr) {
-      console.error('[cv-builder] JSON parse failed:', parseErr, content.slice(0, 300))
-      return { draft: null, failure: 'parse' }
-    }
-
-    const draft = validateDraft(parsed)
-    if (!draft) {
-      console.error('[cv-builder] Validation failed:', JSON.stringify(parsed).slice(0, 500))
-      return { draft: null, failure: 'validation' }
-    }
-    return { draft }
-  } catch (err: unknown) {
-    clearTimeout(timeout)
-    const error = err as { name?: string; message?: string }
-    if (error.name === 'AbortError') return { draft: null, failure: 'timeout' }
-    console.error('[cv-builder] Gemini call failed:', err)
-    if (error.message?.includes('JSON') || error.message?.includes('schema')) {
-      return { draft: null, failure: 'parse' }
-    }
-    return { draft: null, failure: 'validation' }
-  }
-}
-
-function geminiFailureMessage(failure: GeminiFailure): string {
+function geminiFailureMessage(failure: 'timeout' | 'empty' | 'parse' | 'api'): string {
   switch (failure) {
     case 'timeout':
       return 'CV generation timed out. Please try again with shorter history text.'
     case 'parse':
-    case 'validation':
       return 'The AI returned an invalid response. Please try again.'
     case 'empty':
       return 'The AI returned an empty response. Please try again.'
+    case 'api':
+      return 'AI service error. Please try again in a moment.'
   }
 }
 
@@ -348,18 +275,27 @@ export async function POST(req: NextRequest) {
       missingSkills: pathway.missing_skills_json || [],
     })
 
-    let result = await callGemini(client, userPrompt)
-    for (let attempt = 0; attempt < 2 && !result.draft; attempt++) {
-      result = await callGemini(client, userPrompt)
-    }
-    if (!result.draft) {
+    const result = await callGeminiJson(
+      client,
+      getGeminiModel(),
+      {
+        systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
+        userPrompt,
+        temperature: 0.5,
+        maxOutputTokens: 8192,
+        timeoutMs: 55_000,
+      },
+      validateDraft,
+    )
+
+    if (!result.ok) {
       const status = result.failure === 'timeout' ? 504 : 502
       return NextResponse.json(
-        { error: geminiFailureMessage(result.failure || 'validation') },
+        { error: geminiFailureMessage(result.failure) },
         { status },
       )
     }
-    const draft = result.draft
+    const draft = result.data
 
     const contentJson: CvDraftContent = {
       ...draft,

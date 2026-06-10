@@ -2,15 +2,22 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
+import { callGeminiJson } from '@/lib/gemini-json'
+
+export const maxDuration = 60
 
 const RATE_LIMIT = 5
 const WINDOW_MS = 60 * 60 * 1000
-const TIMEOUT_MS = 20_000
 const MAX_CV_CHARS = 12_000
 
 const CV_REVIEW_SYSTEM_PROMPT = `You are an expert CV reviewer for Capability Navigator — a career transition platform with an empowering, never-judgemental voice.
 
-Analyse the CV text and return highlights as JSON.
+Analyse the CV text and return ONLY valid JSON in this exact shape:
+{
+  "highlights": [
+    { "quote": "...", "type": "strong" | "improve", "label": "...", "category": "impact" | "clarity" | "transferable_skill" | "missing_evidence" | "weak_language" | "formatting" }
+  ]
+}
 
 RULES FOR QUOTES:
 - Each quote MUST be an exact, verbatim substring copied from the CV text (5–25 words).
@@ -28,27 +35,52 @@ OUTPUT:
 - 3–6 items with type "improve"
 - category must be one of: impact, clarity, transferable_skill, missing_evidence, weak_language, formatting`
 
-const RESPONSE_SCHEMA = {
-  type: 'OBJECT',
-  properties: {
-    highlights: {
-      type: 'ARRAY',
-      items: {
-        type: 'OBJECT',
-        properties: {
-          quote: { type: 'STRING' },
-          type: { type: 'STRING', enum: ['strong', 'improve'] },
-          label: { type: 'STRING' },
-          category: {
-            type: 'STRING',
-            enum: ['impact', 'clarity', 'transferable_skill', 'missing_evidence', 'weak_language', 'formatting'],
-          },
-        },
-        required: ['quote', 'type', 'label', 'category'],
-      },
-    },
-  },
-  required: ['highlights'],
+const VALID_TYPES = new Set(['strong', 'improve'])
+const VALID_CATEGORIES = new Set([
+  'impact', 'clarity', 'transferable_skill', 'missing_evidence', 'weak_language', 'formatting',
+])
+
+interface CvHighlight {
+  quote: string
+  type: 'strong' | 'improve'
+  label: string
+  category: string
+}
+
+function normalizeHighlights(data: unknown): CvHighlight[] {
+  if (!data || typeof data !== 'object') return []
+  const raw = (data as { highlights?: unknown }).highlights
+  if (!Array.isArray(raw)) return []
+
+  return raw
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const h = item as Record<string, unknown>
+      const type = typeof h.type === 'string' && VALID_TYPES.has(h.type) ? h.type as 'strong' | 'improve' : 'improve'
+      const category = typeof h.category === 'string' && VALID_CATEGORIES.has(h.category)
+        ? h.category
+        : 'clarity'
+      return {
+        quote: typeof h.quote === 'string' ? h.quote.trim() : '',
+        type,
+        label: typeof h.label === 'string' ? h.label.trim() : String(h.comment || '').trim(),
+        category,
+      }
+    })
+    .filter(h => h.quote.length >= 5 && h.label.length > 0)
+}
+
+function geminiFailureMessage(failure: 'timeout' | 'empty' | 'parse' | 'api'): string {
+  switch (failure) {
+    case 'timeout':
+      return 'Review timed out. Please try again with a shorter CV.'
+    case 'empty':
+      return 'The AI returned an empty response. Please try again.'
+    case 'parse':
+      return 'The AI returned an invalid response. Please try again.'
+    case 'api':
+      return 'AI service error. Please try again in a moment.'
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -89,48 +121,31 @@ export async function POST(req: NextRequest) {
     }
 
     const cvText = text.trim().slice(0, MAX_CV_CHARS)
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    const result = await callGeminiJson(
+      client,
+      getGeminiModel(),
+      {
+        systemInstruction: CV_REVIEW_SYSTEM_PROMPT,
+        userPrompt: `Review this CV:\n\n${cvText}`,
+        temperature: 0.4,
+        maxOutputTokens: 4096,
+        timeoutMs: 25_000,
+      },
+      parsed => {
+        const highlights = normalizeHighlights(parsed)
+        return highlights.length > 0 ? highlights : null
+      },
+    )
 
-    try {
-      const response = await client.models.generateContent({
-        model: getGeminiModel(),
-        contents: `Review this CV:\n\n${cvText}`,
-        config: {
-          systemInstruction: CV_REVIEW_SYSTEM_PROMPT,
-          temperature: 0.4,
-          maxOutputTokens: 2000,
-          responseMimeType: 'application/json',
-          responseSchema: RESPONSE_SCHEMA,
-          abortSignal: controller.signal,
-        },
-      })
-      clearTimeout(timeout)
-
-      const content = response.text
-      if (!content) {
-        return NextResponse.json({ error: 'Empty AI response' }, { status: 502 })
-      }
-
-      let parsed: { highlights?: unknown[] }
-      try {
-        parsed = JSON.parse(content) as { highlights?: unknown[] }
-      } catch {
-        return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 502 })
-      }
-
-      const highlights = Array.isArray(parsed.highlights) ? parsed.highlights : []
-
-      return NextResponse.json({ highlights })
-    } catch (err: unknown) {
-      clearTimeout(timeout)
-      const error = err as { name?: string }
-      if (error.name === 'AbortError') {
-        return NextResponse.json({ error: 'Review timed out' }, { status: 504 })
-      }
-      console.error('[cv-review]', err)
-      return NextResponse.json({ error: 'Review failed' }, { status: 502 })
+    if (!result.ok) {
+      const status = result.failure === 'timeout' ? 504 : 502
+      return NextResponse.json(
+        { error: geminiFailureMessage(result.failure) },
+        { status },
+      )
     }
+
+    return NextResponse.json({ highlights: result.data })
   } catch (err) {
     console.error('[cv-review] Unhandled:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
