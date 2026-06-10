@@ -102,7 +102,7 @@ export default async function DashboardPage() {
                 <div className="text-2xl mb-2">◎</div>
                 <div className="font-semibold mb-1">CV analyzer</div>
                 <div className="text-xs text-[#7A756F] leading-relaxed">
-                  See what&apos;s strong in your CV and what to improve — highlighted in your actual text.
+                  Full expert breakdown of your CV — section by section, with highlights in your actual text.
                 </div>
               </div>
               <span className="text-sm font-medium flex-shrink-0" style={{ color: '#7C6AF0' }}>Open analyzer →</span>

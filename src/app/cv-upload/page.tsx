@@ -99,6 +99,7 @@ export default function CVUploadPage() {
 
       if (canReview) {
         sessionStorage.setItem('cv-review-text', text)
+        sessionStorage.removeItem('cv-review-data')
         sessionStorage.removeItem('cv-review-highlights')
         sessionStorage.setItem('cv-review-status', 'loading')
 
@@ -109,8 +110,11 @@ export default function CVUploadPage() {
         })
           .then(async (res) => {
             if (!res.ok) throw new Error('review failed')
-            const { highlights } = await res.json()
-            sessionStorage.setItem('cv-review-highlights', JSON.stringify(highlights))
+            const data = await res.json()
+            sessionStorage.setItem('cv-review-data', JSON.stringify(data))
+            if (data.highlights) {
+              sessionStorage.setItem('cv-review-highlights', JSON.stringify(data.highlights))
+            }
             sessionStorage.setItem('cv-review-status', 'done')
           })
           .catch(() => sessionStorage.setItem('cv-review-status', 'error'))
