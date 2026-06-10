@@ -22,7 +22,7 @@ export const maxDuration = 60
 
 const RATE_LIMIT = 3
 const WINDOW_MS = 60 * 60 * 1000
-const MAX_HISTORY_CHARS = 12_000
+const MAX_HISTORY_CHARS = 8_000
 const MAX_JD_CHARS = 4_000
 
 const VALID_REGIONS = new Set<CvRegion>(['UK', 'US', 'Canada', 'EU', 'Australia', 'International'])
@@ -45,6 +45,7 @@ function normalizeExperience(val: unknown): CvExperience[] {
   if (!Array.isArray(val)) return []
   return val
     .filter(item => item && typeof item === 'object')
+    .slice(0, 5)
     .map(item => {
       const e = item as Record<string, unknown>
       const tier = e.tier === 'additional' ? 'additional' : 'relevant'
@@ -346,7 +347,9 @@ Location: ${data.location}
 Target role: ${data.targetRole}
 
 WORK HISTORY (raw — translate into capability language for the target pathway using hybrid career-changer format):
-${data.historyText}`
+${data.historyText}
+
+Keep the JSON concise per OUTPUT LIMITS in your instructions.`
 }
 
 export async function POST(req: NextRequest) {
@@ -444,7 +447,6 @@ export async function POST(req: NextRequest) {
       missingSkills: pathway.missing_skills_json || [],
     })
 
-    let parseAttempts = 0
     const result = await callGeminiJson(
       client,
       getGeminiModel(),
@@ -452,15 +454,12 @@ export async function POST(req: NextRequest) {
         systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
         userPrompt,
         temperature: 0.5,
-        maxOutputTokens: 8192,
-        timeoutMs: 48_000,
-        totalTimeoutMs: 52_000,
-        maxAttempts: 2,
+        maxOutputTokens: 6144,
+        timeoutMs: 58_000,
+        totalTimeoutMs: 59_000,
+        maxAttempts: 1,
       },
-      (raw) => {
-        parseAttempts++
-        return validateDraft(raw) ?? (parseAttempts >= 2 ? validateDraftLenient(raw) : null)
-      },
+      (raw) => validateDraft(raw) ?? validateDraftLenient(raw),
       1,
     )
 

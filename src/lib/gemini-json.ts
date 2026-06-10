@@ -227,7 +227,7 @@ export function geminiJsonFailureMessage(failure: GeminiJsonFailure, detail?: st
 
   switch (failure) {
     case 'timeout':
-      return 'Request timed out. Please try again with shorter text.'
+      return 'CV generation timed out — the AI took too long to respond. Please try again. If it keeps failing, shorten your work history or remove the job description.'
     case 'empty':
       return 'The AI returned an empty response. Please try again.'
     case 'parse':

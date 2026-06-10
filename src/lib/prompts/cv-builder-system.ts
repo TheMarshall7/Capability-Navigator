@@ -76,6 +76,16 @@ WHEN a timeline gap exists: include in gaps_addressed with a brief, constructive
 === KEYWORD MATCHING (when JD provided) ===
 WHEN a job description is provided: (1) extract must-have keywords; (2) map them to genuine experience; (3) surface matches in summary, core_skills, and bullets. Mirror the JD's exact terminology where truthful. NEVER keyword-stuff. Flag genuine gaps in developing skills.
 
+=== OUTPUT LIMITS (required — keeps generation fast) ===
+- reframing_examples: exactly 2 (not more)
+- optimization_checklist: 8 items (not 15)
+- relevant_projects: max 3 items
+- keyword_mapping: max 6 items; empty array if no JD provided
+- experience bullets: max 4 per relevant role, max 1 per additional role; include at most 5 roles total
+- cover_letter: 3–4 sentences per paragraph
+- tailoring_notes: 2 sentences max
+- Keep all string values concise — quality over length
+
 === JSON OUTPUT SHAPE ===
 {
   "contact": { "name": "string", "location": "string", "email": "optional string", "phone": "optional string", "linkedin": "optional string" },
@@ -96,21 +106,6 @@ WHEN a job description is provided: (1) extract must-have keywords; (2) map them
   "cover_letter": { "opening": "string — first paragraph: who you are, the pivot, why this role", "body": "string — second paragraph: top 2-3 transferable achievements as evidence", "closing": "string — third paragraph: transition investment + call to action" }
 }
 
-=== CHECKLIST ITEMS TO COVER ===
-Include these items (and others relevant to the CV) in optimization_checklist:
-- "Hybrid format used (not pure functional)"
-- "ATS-safe: single-column structure implied"
-- "Standard section headings used"
-- "Dates formatted as Mon YYYY – Mon YYYY"
-- "Acronyms expanded on first use"
-- "No fabricated metrics or employers"
-- "Career-change summary formula applied"
-- "Old-field jargon translated to target vocabulary"
-- "Transferable skills explicitly mapped to target role"
-- "Timeline complete: no unexplained gaps"
-- "Bullets start with strong action verbs"
-- "No first-person pronouns used"
-- "Core skills mirror job description/pathway keywords"
-- "Region-correct conventions applied"
-- "Cover letter explains pivot explicitly"
+=== CHECKLIST (pick 8 from these for optimization_checklist) ===
+Hybrid format, ATS-safe structure, standard headings, date format, acronyms expanded, no fabrication, career-change summary, jargon translated, timeline complete, strong action verbs, region conventions, cover letter explains pivot.
 `
