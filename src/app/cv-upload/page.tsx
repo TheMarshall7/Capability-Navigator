@@ -90,7 +90,35 @@ export default function CVUploadPage() {
       }, { onConflict: 'user_id' })
 
       if (dbError) throw dbError
-      router.push('/questionnaire')
+
+      const text = (extractedText || '').trim()
+      const canReview = text.length >= 80
+        && !/^\[.*uploaded/i.test(text)
+        && !text.startsWith('[PDF')
+        && !text.startsWith('[Word')
+
+      if (canReview) {
+        sessionStorage.setItem('cv-review-text', text)
+        sessionStorage.removeItem('cv-review-highlights')
+        sessionStorage.setItem('cv-review-status', 'loading')
+
+        fetch('/api/cv-review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+          .then(async (res) => {
+            if (!res.ok) throw new Error('review failed')
+            const { highlights } = await res.json()
+            sessionStorage.setItem('cv-review-highlights', JSON.stringify(highlights))
+            sessionStorage.setItem('cv-review-status', 'done')
+          })
+          .catch(() => sessionStorage.setItem('cv-review-status', 'error'))
+
+        router.push('/cv-review')
+      } else {
+        router.push('/questionnaire')
+      }
     } catch (err: any) {
       setError(err.message || 'Upload failed. Please try again.')
     } finally {
