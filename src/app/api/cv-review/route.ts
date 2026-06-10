@@ -71,8 +71,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'AI service unavailable' }, { status: 503 })
     }
 
-    const { text } = await req.json()
-    if (!text || typeof text !== 'string' || text.trim().length < 80) {
+    let body: Record<string, unknown>
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
+
+    const text = body.text
+    if (typeof text !== 'string' || text.trim().length < 80) {
       return NextResponse.json({ error: 'CV text too short for review' }, { status: 400 })
     }
 
@@ -105,7 +112,13 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Empty AI response' }, { status: 502 })
       }
 
-      const parsed = JSON.parse(content) as { highlights?: unknown[] }
+      let parsed: { highlights?: unknown[] }
+      try {
+        parsed = JSON.parse(content) as { highlights?: unknown[] }
+      } catch {
+        return NextResponse.json({ error: 'AI returned invalid JSON' }, { status: 502 })
+      }
+
       const highlights = Array.isArray(parsed.highlights) ? parsed.highlights : []
 
       return NextResponse.json({ highlights })

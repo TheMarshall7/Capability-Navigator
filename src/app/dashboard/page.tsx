@@ -93,6 +93,24 @@ export default async function DashboardPage() {
       {/* Career velocity widget */}
       <CareerVelocity />
 
+      {/* CV Builder — shown when profile + pathways exist */}
+      {reportData && pathwaysData && (
+        <Link href={`/cv-builder?pathwayId=${pathwaysData.id}`} className="no-underline block mb-5">
+          <Card className="!border-l-4 !border-l-[#E8A838] hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <div className="text-2xl mb-2">✎</div>
+                <div className="font-semibold mb-1">Your CV, rewritten for {pathwaysData.title}</div>
+                <div className="text-xs text-[#7A756F] leading-relaxed">
+                  Translate your experience into the language hiring managers in this field actually search for.
+                </div>
+              </div>
+              <span className="text-sm font-medium text-[#E8A838] flex-shrink-0">Open CV Builder →</span>
+            </div>
+          </Card>
+        </Link>
+      )}
+
       {/* Action cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
         <Link href="/profile" className="no-underline">

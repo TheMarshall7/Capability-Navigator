@@ -121,12 +121,13 @@ export default function CVReviewPage() {
   const [tab, setTab] = useState<Tab>('strong')
   const [activeIndex, setActiveIndex] = useState(0)
   const [showFallback, setShowFallback] = useState(false)
+  const [loadError, setLoadError] = useState('')
 
   const skipToQuestionnaire = useCallback(() => {
     router.replace('/questionnaire')
   }, [router])
 
-  const fetchReview = useCallback(async (text: string) => {
+  const fetchReview = useCallback(async (text: string): Promise<{ highlights: CvHighlight[] | null; error?: string }> => {
     sessionStorage.setItem(STORAGE_STATUS, 'loading')
     sessionStorage.removeItem(STORAGE_HIGHLIGHTS)
 
@@ -136,14 +137,30 @@ export default function CVReviewPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       })
-      if (!res.ok) throw new Error('review failed')
-      const { highlights } = await res.json()
+
+      let data: { highlights?: CvHighlight[]; error?: string }
+      try {
+        data = await res.json()
+      } catch {
+        sessionStorage.setItem(STORAGE_STATUS, 'error')
+        return { highlights: null, error: `Server returned an invalid response (${res.status}).` }
+      }
+
+      if (!res.ok) {
+        sessionStorage.setItem(STORAGE_STATUS, 'error')
+        return { highlights: null, error: data.error || `Review failed (${res.status}).` }
+      }
+
+      const highlights = Array.isArray(data.highlights) ? data.highlights : []
       sessionStorage.setItem(STORAGE_HIGHLIGHTS, JSON.stringify(highlights))
       sessionStorage.setItem(STORAGE_STATUS, 'done')
-      return highlights as CvHighlight[]
-    } catch {
+      return { highlights }
+    } catch (err: unknown) {
       sessionStorage.setItem(STORAGE_STATUS, 'error')
-      return null
+      return {
+        highlights: null,
+        error: err instanceof Error ? err.message : 'Review request failed.',
+      }
     }
   }, [])
 
@@ -152,64 +169,79 @@ export default function CVReviewPage() {
     const started = Date.now()
 
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.replace('/auth'); return }
+      try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser()
+        if (authError || !user) { router.replace('/auth'); return }
 
-      let text = sessionStorage.getItem(STORAGE_TEXT) || ''
-      if (!text) {
-        const { data: cv } = await supabase
-          .from('cv_uploads')
-          .select('extracted_text')
-          .eq('user_id', user.id)
-          .maybeSingle()
-        text = cv?.extracted_text || ''
-      }
+        let text = sessionStorage.getItem(STORAGE_TEXT) || ''
+        if (!text) {
+          const { data: cv, error: cvError } = await supabase
+            .from('cv_uploads')
+            .select('extracted_text')
+            .eq('user_id', user.id)
+            .maybeSingle()
 
-      if (!isReviewableText(text)) {
-        skipToQuestionnaire()
-        return
-      }
-
-      if (!cancelled) setCvText(text)
-
-      const poll = async (): Promise<CvHighlight[] | null> => {
-        while (!cancelled && Date.now() - started < WAIT_MS) {
-          const status = sessionStorage.getItem(STORAGE_STATUS)
-
-          if (status === 'done') {
-            const stored = sessionStorage.getItem(STORAGE_HIGHLIGHTS)
-            if (stored) {
-              try { return JSON.parse(stored) as CvHighlight[] } catch { return null }
-            }
+          if (cvError) {
+            throw new Error('Could not load your CV text. Please try again.')
           }
-
-          if (status === 'error') return null
-
-          if (!status || status === 'loading') {
-            await new Promise(r => setTimeout(r, POLL_MS))
-            continue
-          }
-
-          break
+          text = cv?.extracted_text || ''
         }
-        return null
+
+        if (!isReviewableText(text)) {
+          skipToQuestionnaire()
+          return
+        }
+
+        if (!cancelled) setCvText(text)
+
+        const poll = async (): Promise<CvHighlight[] | null> => {
+          while (!cancelled && Date.now() - started < WAIT_MS) {
+            const status = sessionStorage.getItem(STORAGE_STATUS)
+
+            if (status === 'done') {
+              const stored = sessionStorage.getItem(STORAGE_HIGHLIGHTS)
+              if (stored) {
+                try { return JSON.parse(stored) as CvHighlight[] } catch { return null }
+              }
+            }
+
+            if (status === 'error') return null
+
+            if (!status || status === 'loading') {
+              await new Promise(r => setTimeout(r, POLL_MS))
+              continue
+            }
+
+            break
+          }
+          return null
+        }
+
+        let highlights = await poll()
+        let reviewError: string | undefined
+
+        if (!highlights && !cancelled) {
+          const result = await fetchReview(text)
+          highlights = result.highlights
+          reviewError = result.error
+        }
+
+        if (cancelled) return
+
+        if (!highlights) {
+          if (reviewError) console.warn('[cv-review] Skipping —', reviewError)
+          skipToQuestionnaire()
+          return
+        }
+
+        setRawHighlights(highlights)
+      } catch (err: unknown) {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : 'Failed to load CV review.')
+        }
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-
-      let highlights = await poll()
-
-      if (!highlights && !cancelled) {
-        highlights = await fetchReview(text)
-      }
-
-      if (cancelled) return
-
-      if (!highlights) {
-        skipToQuestionnaire()
-        return
-      }
-
-      setRawHighlights(highlights)
-      setLoading(false)
     }
 
     init()
@@ -260,6 +292,23 @@ export default function CVReviewPage() {
       <div className="min-h-[60vh] flex flex-col items-center justify-center px-6">
         <div className="w-8 h-8 border-2 border-[#E8E3DA] rounded-full animate-spin mb-4" style={{ borderTopColor: '#E07A5F' }} />
         <p className="text-[#7A756F] text-sm">Reviewing your CV…</p>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="max-w-[600px] mx-auto px-6 py-16 text-center">
+        <Card className="!py-10">
+          <h1 className="text-2xl mb-3" style={{ fontFamily: 'var(--font-lora)' }}>Could not load review</h1>
+          <p className="text-sm text-[#DC2626] bg-[#FEF2F2] border border-[#FECACA] rounded-xl px-4 py-3 mb-6 leading-relaxed">
+            {loadError}
+          </p>
+          <div className="flex gap-3 justify-center flex-wrap">
+            <Btn onClick={() => { setLoadError(''); setLoading(true); window.location.reload() }}>Try again</Btn>
+            <Btn variant="outline" onClick={skipToQuestionnaire}>Continue to questions →</Btn>
+          </div>
+        </Card>
       </div>
     )
   }

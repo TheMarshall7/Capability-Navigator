@@ -89,10 +89,16 @@ export default async function PathwaysPage() {
                 </div>
               )}
 
-              <Link href={`/roadmap/${p.id}`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-[#E07A5F] text-white rounded-xl text-sm font-medium no-underline hover:bg-[#C96848] transition-colors">
-                View full roadmap →
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link href={`/roadmap/${p.id}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#E07A5F] text-white rounded-xl text-sm font-medium no-underline hover:bg-[#C96848] transition-colors">
+                  View full roadmap →
+                </Link>
+                <Link href={`/cv-builder?pathwayId=${p.id}`}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-transparent border border-[#E8E3DA] text-[#2D2926] rounded-xl text-sm font-medium no-underline hover:bg-[#F8F6F1] transition-colors">
+                  Build a CV for this pathway →
+                </Link>
+              </div>
             </Card>
           )
         })}
