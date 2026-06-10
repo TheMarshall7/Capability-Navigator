@@ -3,130 +3,219 @@ import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
 import { callGeminiJson, geminiJsonFailureMessage } from '@/lib/gemini-json'
+import { CV_BUILDER_SYSTEM_PROMPT } from '@/lib/prompts/cv-builder-system'
+import type {
+  CvDraftContent,
+  CvRegion,
+  CvExperience,
+  CvEducation,
+  CvRelevantProject,
+  CvGapAddressed,
+  CvReframingExample,
+  CvKeywordMapping,
+  CvChecklistItem,
+} from '@/types/cv-builder'
+
+export type { CvDraftContent }
 
 export const maxDuration = 60
 
 const RATE_LIMIT = 3
 const WINDOW_MS = 60 * 60 * 1000
 const MAX_HISTORY_CHARS = 12_000
+const MAX_JD_CHARS = 4_000
 
-const CV_BUILDER_SYSTEM_PROMPT = `You are a CV writer for Capability Navigator — a career transition platform.
+const VALID_REGIONS = new Set<CvRegion>(['UK', 'US', 'Canada', 'EU', 'Australia', 'International'])
 
-Your job: rewrite the user's work history so it speaks the language of their target pathway. People already have the skills — their CV just describes them in the wrong dialect. You translate.
-
-Return ONLY valid JSON in this exact shape:
-{
-  "headline": "string",
-  "summary": "string",
-  "experience": [
-    { "company": "string", "title": "string", "dates": "string", "bullets": ["string"] }
-  ],
-  "skills": { "core": ["string"], "developing": ["string"] },
-  "tailoring_notes": "string"
+function inferRegion(location: string): CvRegion {
+  const loc = location.toLowerCase()
+  if (loc.includes('uk') || loc.includes('england') || loc.includes('scotland') || loc.includes('wales') || loc.includes('london') || loc.includes('manchester') || loc.includes('birmingham')) return 'UK'
+  if (loc.includes('australia') || loc.includes('sydney') || loc.includes('melbourne') || loc.includes('brisbane')) return 'Australia'
+  if (loc.includes('canada') || loc.includes('ontario') || loc.includes('toronto') || loc.includes('vancouver') || loc.includes('montreal')) return 'Canada'
+  if (loc.includes('usa') || loc.includes('united states') || loc.includes('new york') || loc.includes('los angeles') || loc.includes('chicago')) return 'US'
+  return 'UK'
 }
 
-RULES:
-- Reframe every piece of experience using capability language (e.g. lesson planning → curriculum design, parent evenings → stakeholder management).
-- Use keywords hiring managers in the target field actually search for.
-- Lead bullets with outcomes where any are inferable from the input.
-- Write a LinkedIn-ready headline: pipe-separated format like "Learning Designer | 8 Years Curriculum & Instructional Design | Open to L&D, EdTech".
-- Summary: 3–4 sentences, tailored to the target pathway.
-- Experience: preserve real employers, titles, and dates from the input — reframe bullets only. Max 5 bullets per role, each starting with a strong verb.
-- Skills: group into core (existing transferable strengths) and developing (pathway missing skills the user has started addressing based on their history).
-- tailoring_notes: 2–3 sentences telling the user what was changed and why — teach them the reframing.
-
-CRITICAL — NEVER FABRICATE:
-Never fabricate employers, dates, titles, qualifications, or metrics — if the input lacks a number, the output must not invent one. Honest reframing, not fiction.`
-
-export interface CvDraftExperience {
-  company: string
-  title: string
-  dates: string
-  bullets: string[]
+function normalizeStringArray(val: unknown): string[] {
+  if (!Array.isArray(val)) return []
+  return val.map(s => String(s).trim()).filter(Boolean)
 }
 
-export interface CvDraftContent {
-  headline: string
-  summary: string
-  experience: CvDraftExperience[]
-  skills: { core: string[]; developing: string[] }
-  tailoring_notes: string
-  _inputs?: {
-    name: string
-    location: string
-    targetRole: string
-    historyText: string
-  }
+function normalizeExperience(val: unknown): CvExperience[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const e = item as Record<string, unknown>
+      const tier = e.tier === 'additional' ? 'additional' : 'relevant'
+      const bullets = Array.isArray(e.bullets)
+        ? e.bullets.map(b => String(b).trim()).filter(Boolean).slice(0, 6)
+        : []
+      return {
+        company: typeof e.company === 'string' && e.company.trim() ? e.company.trim() : 'Organisation',
+        title: typeof e.title === 'string' && e.title.trim() ? e.title.trim() : 'Role',
+        location: typeof e.location === 'string' ? e.location.trim() : undefined,
+        dates: typeof e.dates === 'string' && e.dates.trim() ? e.dates.trim() : 'Dates not specified',
+        tier,
+        bullets,
+      }
+    })
 }
 
-function normalizeParsedDraft(data: unknown): Record<string, unknown> | null {
-  if (!data || typeof data !== 'object') return null
-  const d = { ...(data as Record<string, unknown>) }
+function normalizeEducation(val: unknown): CvEducation[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const e = item as Record<string, unknown>
+      return {
+        institution: typeof e.institution === 'string' ? e.institution.trim() : 'Institution',
+        qualification: typeof e.qualification === 'string' ? e.qualification.trim() : 'Qualification',
+        year: typeof e.year === 'string' ? e.year.trim() : '',
+        notes: typeof e.notes === 'string' ? e.notes.trim() : undefined,
+      }
+    })
+    .filter(e => e.institution)
+}
 
-  if (!d.tailoring_notes && typeof d.tailoringNotes === 'string') {
-    d.tailoring_notes = d.tailoringNotes
-  }
+function normalizeProjects(val: unknown): CvRelevantProject[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const p = item as Record<string, unknown>
+      return {
+        title: typeof p.title === 'string' ? p.title.trim() : '',
+        description: typeof p.description === 'string' ? p.description.trim() : '',
+      }
+    })
+    .filter(p => p.title)
+}
 
-  if (!d.skills || typeof d.skills !== 'object') {
-    d.skills = { core: [], developing: [] }
-  } else {
-    const skills = d.skills as Record<string, unknown>
-    if (!Array.isArray(skills.core)) skills.core = []
-    if (!Array.isArray(skills.developing)) skills.developing = []
-    d.skills = skills
-  }
+function normalizeGaps(val: unknown): CvGapAddressed[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const g = item as Record<string, unknown>
+      return {
+        period: typeof g.period === 'string' ? g.period.trim() : '',
+        explanation: typeof g.explanation === 'string' ? g.explanation.trim() : '',
+      }
+    })
+    .filter(g => g.period && g.explanation)
+}
 
-  if (!Array.isArray(d.experience)) {
-    d.experience = []
-  } else {
-    d.experience = (d.experience as unknown[])
-      .filter(exp => exp && typeof exp === 'object')
-      .map(exp => {
-        const e = { ...(exp as Record<string, unknown>) }
-        const bullets = Array.isArray(e.bullets)
-          ? e.bullets.filter(b => typeof b === 'string' && b.trim()).slice(0, 5)
-          : []
-        return {
-          company: typeof e.company === 'string' && e.company.trim() ? e.company.trim() : 'Organisation',
-          title: typeof e.title === 'string' && e.title.trim() ? e.title.trim() : 'Role',
-          dates: typeof e.dates === 'string' && e.dates.trim() ? e.dates.trim() : 'Dates not specified',
-          bullets,
-        }
-      })
-  }
+function normalizeReframing(val: unknown): CvReframingExample[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const r = item as Record<string, unknown>
+      return {
+        before: typeof r.before === 'string' ? r.before.trim() : '',
+        after: typeof r.after === 'string' ? r.after.trim() : '',
+        why: typeof r.why === 'string' ? r.why.trim() : '',
+      }
+    })
+    .filter(r => r.before && r.after)
+}
 
-  return d
+function normalizeKeywordMapping(val: unknown): CvKeywordMapping[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const k = item as Record<string, unknown>
+      return {
+        jd_keyword: typeof k.jd_keyword === 'string' ? k.jd_keyword.trim() : '',
+        evidence_in_cv: typeof k.evidence_in_cv === 'string' ? k.evidence_in_cv.trim() : '',
+      }
+    })
+    .filter(k => k.jd_keyword)
+}
+
+function normalizeChecklist(val: unknown): CvChecklistItem[] {
+  if (!Array.isArray(val)) return []
+  return val
+    .filter(item => item && typeof item === 'object')
+    .map(item => {
+      const c = item as Record<string, unknown>
+      return {
+        item: typeof c.item === 'string' ? c.item.trim() : '',
+        passed: Boolean(c.passed),
+        note: typeof c.note === 'string' ? c.note.trim() : undefined,
+      }
+    })
+    .filter(c => c.item)
 }
 
 function validateDraft(data: unknown): CvDraftContent | null {
-  const normalized = normalizeParsedDraft(data)
-  if (!normalized) return null
+  if (!data || typeof data !== 'object') return null
+  const d = data as Record<string, unknown>
 
-  const headline = typeof normalized.headline === 'string' ? normalized.headline.trim() : ''
-  const summary = typeof normalized.summary === 'string' ? normalized.summary.trim() : ''
-  const tailoringNotes = typeof normalized.tailoring_notes === 'string'
-    ? normalized.tailoring_notes.trim()
-    : ''
-
+  const headline = typeof d.headline === 'string' ? d.headline.trim() : ''
+  const summary = typeof d.summary === 'string' ? d.summary.trim() : ''
   if (!headline && !summary) return null
 
-  const skills = normalized.skills as { core: unknown[]; developing: unknown[] }
-  const experience = normalized.experience as CvDraftExperience[]
+  const tailoringNotes = typeof d.tailoring_notes === 'string' ? d.tailoring_notes.trim() : 'Your experience was reframed using capability language for your target pathway.'
+  const coverLetterRaw = d.cover_letter as Record<string, unknown> | null
+  const cover_letter = {
+    opening: typeof coverLetterRaw?.opening === 'string' ? coverLetterRaw.opening.trim() : '',
+    body: typeof coverLetterRaw?.body === 'string' ? coverLetterRaw.body.trim() : '',
+    closing: typeof coverLetterRaw?.closing === 'string' ? coverLetterRaw.closing.trim() : '',
+  }
+  if (!cover_letter.opening) return null
+
+  const contactRaw = d.contact as Record<string, unknown> | null
+  const contact = {
+    name: typeof contactRaw?.name === 'string' ? contactRaw.name.trim() : '',
+    location: typeof contactRaw?.location === 'string' ? contactRaw.location.trim() : '',
+    email: typeof contactRaw?.email === 'string' ? contactRaw.email.trim() : undefined,
+    phone: typeof contactRaw?.phone === 'string' ? contactRaw.phone.trim() : undefined,
+    linkedin: typeof contactRaw?.linkedin === 'string' ? contactRaw.linkedin.trim() : undefined,
+  }
+
+  const regionRaw = typeof d.region_applied === 'string' ? d.region_applied as CvRegion : 'UK'
+  const region_applied = VALID_REGIONS.has(regionRaw) ? regionRaw : 'UK'
+
+  const experience = normalizeExperience(d.experience)
+  const core_skills = normalizeStringArray(d.core_skills)
+  const reframing_examples = normalizeReframing(d.reframing_examples)
+  const optimization_checklist = normalizeChecklist(d.optimization_checklist)
+
+  const relevantRoles = experience.filter(e => e.tier === 'relevant')
+  if (relevantRoles.length === 0) return null
+  const mostRecentBullets = relevantRoles[0].bullets.length
+  if (mostRecentBullets < 2) return null
+  if (core_skills.length < 4) return null
+  if (reframing_examples.length < 1) return null
+  if (optimization_checklist.length < 5) return null
+
+  const skillsRaw = d.skills as Record<string, unknown> | null
+  const skills = {
+    core: normalizeStringArray(skillsRaw?.core),
+    developing: normalizeStringArray(skillsRaw?.developing),
+  }
+  if (skills.core.length === 0) skills.core = core_skills.slice(0, 6)
 
   return {
+    contact,
+    region_applied,
+    format: 'hybrid',
     headline: headline || 'Career professional open to new opportunities',
     summary: summary || 'Experienced professional with transferable skills ready for a new pathway.',
-    experience: experience.map(e => ({
-      company: e.company,
-      title: e.title,
-      dates: e.dates,
-      bullets: e.bullets,
-    })),
-    skills: {
-      core: skills.core.map(s => String(s).trim()).filter(Boolean),
-      developing: skills.developing.map(s => String(s).trim()).filter(Boolean),
-    },
-    tailoring_notes: tailoringNotes || 'Your experience was reframed using capability language for your target pathway.',
+    core_skills,
+    relevant_projects: normalizeProjects(d.relevant_projects),
+    experience,
+    education: normalizeEducation(d.education),
+    skills,
+    gaps_addressed: normalizeGaps(d.gaps_addressed),
+    tailoring_notes: tailoringNotes,
+    reframing_examples,
+    keyword_mapping: normalizeKeywordMapping(d.keyword_mapping),
+    optimization_checklist,
+    cover_letter,
   }
 }
 
@@ -134,7 +223,9 @@ function buildUserPrompt(data: {
   name: string
   location: string
   targetRole: string
+  targetRegion: CvRegion
   historyText: string
+  jobDescription?: string
   reportSummary: string
   coreCapabilities: { title: string; explanation: string; evidence: string }[]
   hiddenStrengths: { title: string; explanation: string }[]
@@ -150,12 +241,17 @@ function buildUserPrompt(data: {
     .join('\n')
   const gaps = data.missingSkills.map(s => `- ${s}`).join('\n')
 
+  const jdSection = data.jobDescription
+    ? `\nJOB DESCRIPTION TO TAILOR TO (extract keywords, mirror exact terminology where truthful):\n${data.jobDescription}\n`
+    : ''
+
   return `TARGET PATHWAY: ${data.pathwayTitle}
 Match reason: ${data.matchReason}
-Missing skills to address in "developing": ${gaps || 'None listed'}
-
+Missing skills to surface in "developing": ${gaps || 'None listed'}
+TARGET REGION: ${data.targetRegion} — apply all regional conventions for this region throughout.
+${jdSection}
 CAPABILITY PROFILE SUMMARY:
-${data.reportSummary}
+${data.reportSummary || 'Not available'}
 
 CORE CAPABILITIES:
 ${caps || 'None'}
@@ -168,7 +264,7 @@ Name: ${data.name}
 Location: ${data.location}
 Target role: ${data.targetRole}
 
-WORK HISTORY (raw — reframe using capability language for the target pathway):
+WORK HISTORY (raw — translate into capability language for the target pathway using hybrid career-changer format):
 ${data.historyText}`
 }
 
@@ -200,15 +296,18 @@ export async function POST(req: NextRequest) {
     }
 
     const pathwayId = body.pathwayId
-    const name = body.name
-    const location = body.location
-    const targetRole = body.targetRole
-    const historyText = body.historyText
+    const name = typeof body.name === 'string' ? body.name.trim() : ''
+    const location = typeof body.location === 'string' ? body.location.trim() : ''
+    const targetRole = typeof body.targetRole === 'string' ? body.targetRole.trim() : ''
+    const historyText = typeof body.historyText === 'string' ? body.historyText.trim() : ''
+    const jobDescription = typeof body.jobDescription === 'string' ? body.jobDescription.trim() : undefined
+    const regionRaw = typeof body.targetRegion === 'string' ? body.targetRegion as CvRegion : null
+    const targetRegion: CvRegion = regionRaw && VALID_REGIONS.has(regionRaw) ? regionRaw : inferRegion(location)
 
     if (typeof pathwayId !== 'string' || !pathwayId) {
       return NextResponse.json({ error: 'pathwayId is required' }, { status: 400 })
     }
-    if (typeof historyText !== 'string' || !historyText.trim()) {
+    if (!historyText) {
       return NextResponse.json({ error: 'Work history text is required' }, { status: 400 })
     }
 
@@ -250,10 +349,12 @@ export async function POST(req: NextRequest) {
     }
 
     const userPrompt = buildUserPrompt({
-      name: (typeof name === 'string' ? name : '').trim() || 'Candidate',
-      location: (typeof location === 'string' ? location : '').trim(),
-      targetRole: (typeof targetRole === 'string' ? targetRole : '').trim() || pathway.title,
-      historyText: historyText.trim().slice(0, MAX_HISTORY_CHARS),
+      name: name || 'Candidate',
+      location,
+      targetRole: targetRole || pathway.title,
+      targetRegion,
+      historyText: historyText.slice(0, MAX_HISTORY_CHARS),
+      jobDescription: jobDescription ? jobDescription.slice(0, MAX_JD_CHARS) : undefined,
       reportSummary: report.summary || 'No capability summary available.',
       coreCapabilities: report.core_capabilities_json || [],
       hiddenStrengths: report.hidden_strengths_json || [],
@@ -269,10 +370,11 @@ export async function POST(req: NextRequest) {
         systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
         userPrompt,
         temperature: 0.5,
-        maxOutputTokens: 4096,
-        timeoutMs: 25_000,
+        maxOutputTokens: 8192,
+        timeoutMs: 55_000,
       },
       validateDraft,
+      3,
     )
 
     if (!result.ok) {
@@ -283,22 +385,23 @@ export async function POST(req: NextRequest) {
         { status },
       )
     }
-    const draft = result.data
 
-    const contentJson: CvDraftContent = {
-      ...draft,
+    const draft: CvDraftContent = {
+      ...result.data,
       _inputs: {
-        name: (typeof name === 'string' ? name : '').trim(),
-        location: (typeof location === 'string' ? location : '').trim(),
-        targetRole: (typeof targetRole === 'string' ? targetRole : '').trim() || pathway.title,
-        historyText: historyText.trim(),
+        name,
+        location,
+        targetRole: targetRole || pathway.title,
+        targetRegion,
+        historyText,
+        jobDescription: jobDescription || undefined,
       },
     }
 
     const { error: upsertError } = await supabase.from('cv_drafts').upsert({
       user_id: user.id,
       pathway_id: pathwayId,
-      content_json: contentJson,
+      content_json: draft,
       updated_at: new Date().toISOString(),
     }, { onConflict: 'user_id,pathway_id' })
 
@@ -306,7 +409,7 @@ export async function POST(req: NextRequest) {
       console.error('[cv-builder] Upsert failed:', upsertError)
       const isMissingTable = upsertError.code === '42P01' || upsertError.message?.includes('cv_drafts')
       return NextResponse.json({
-        draft: contentJson,
+        draft,
         saved: false,
         warning: isMissingTable
           ? 'Your CV was generated but could not be saved — the database table may not exist yet. Run migration 004_cv_drafts.sql in Supabase.'
@@ -314,7 +417,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ draft: contentJson, saved: true })
+    return NextResponse.json({ draft, saved: true })
   } catch (err) {
     console.error('[cv-builder] Unhandled:', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

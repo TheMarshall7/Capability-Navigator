@@ -95,17 +95,28 @@ export default async function DashboardPage() {
 
       {/* CV Review — shown when CV uploaded */}
       {cvData && (
-        <Link href="/cv-review" className="no-underline block mb-5">
+        <Link
+          href={
+            reportData && pathwaysData
+              ? `/cv-review?reanalyze=1&pathwayId=${pathwaysData.id}`
+              : '/cv-review'
+          }
+          className="no-underline block mb-5"
+        >
           <Card className="!border-l-4 !border-l-[#7C6AF0] hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <div className="text-2xl mb-2">◎</div>
                 <div className="font-semibold mb-1">CV analyzer</div>
                 <div className="text-xs text-[#7A756F] leading-relaxed">
-                  Full expert breakdown of your CV — section by section, with highlights in your actual text.
+                  {reportData && pathwaysData
+                    ? `ATS audit, career-change diagnostics, and reframing advice — reviewed against your ${pathwaysData.title} pathway.`
+                    : 'ATS audit, bullet-craft review, career-change diagnostics, and regional conventions — section by section.'}
                 </div>
               </div>
-              <span className="text-sm font-medium flex-shrink-0" style={{ color: '#7C6AF0' }}>Open analyzer →</span>
+              <span className="text-sm font-medium flex-shrink-0" style={{ color: '#7C6AF0' }}>
+                {reportData && pathwaysData ? 'Re-analyse CV →' : 'Open analyzer →'}
+              </span>
             </div>
           </Card>
         </Link>
@@ -120,7 +131,7 @@ export default async function DashboardPage() {
                 <div className="text-2xl mb-2">✎</div>
                 <div className="font-semibold mb-1">Your CV, rewritten for {pathwaysData.title}</div>
                 <div className="text-xs text-[#7A756F] leading-relaxed">
-                  Translate your experience into the language hiring managers in this field actually search for.
+                  Pathway-tailored, ATS-safe CV in hybrid career-changer format — with a cover letter and reframing teach-back.
                 </div>
               </div>
               <span className="text-sm font-medium text-[#E8A838] flex-shrink-0">Open CV Builder →</span>
