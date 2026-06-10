@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase-browser'
 import { Btn } from '@/components/ui/Btn'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import { locateHighlight } from '@/lib/cv-highlight-locate'
 
 type Tab = 'strong' | 'improve'
 type Category = 'impact' | 'clarity' | 'transferable_skill' | 'missing_evidence' | 'weak_language' | 'formatting'
@@ -41,12 +42,6 @@ function isReviewableText(text: string): boolean {
   if (t.length < 80) return false
   if (/^\[.*uploaded/i.test(t) || t.startsWith('[PDF') || t.startsWith('[Word')) return false
   return true
-}
-
-function locateHighlight(text: string, quote: string): { start: number; end: number } | null {
-  const idx = text.toLowerCase().indexOf(quote.toLowerCase())
-  if (idx === -1) return null
-  return { start: idx, end: idx + quote.length }
 }
 
 function resolveHighlights(text: string, raw: CvHighlight[], tab: Tab): LocatedHighlight[] {
@@ -252,22 +247,29 @@ export default function CVReviewPage() {
     return () => { cancelled = true }
   }, [supabase, router, skipToQuestionnaire, fetchReview])
 
+  const tabRawHighlights = useMemo(
+    () => rawHighlights.filter(h => h.type === tab),
+    [rawHighlights, tab],
+  )
+
   const tabHighlights = useMemo(
     () => resolveHighlights(cvText, rawHighlights, tab),
     [cvText, rawHighlights, tab],
   )
+
+  const useListMode = tabRawHighlights.length > 0 && tabHighlights.length < 2
 
   useEffect(() => {
     setActiveIndex(0)
   }, [tab])
 
   useEffect(() => {
-    if (!loading && tabHighlights.length < 2) {
+    if (!loading && tabRawHighlights.length === 0 && !analysisError) {
       setShowFallback(true)
     } else {
       setShowFallback(false)
     }
-  }, [loading, tabHighlights.length])
+  }, [loading, tabRawHighlights.length, analysisError])
 
   useEffect(() => {
     if (activeRef.current) {
@@ -277,7 +279,7 @@ export default function CVReviewPage() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (showFallback || loading || tabHighlights.length < 2) return
+      if (showFallback || loading || useListMode || tabHighlights.length < 2) return
       if (e.key === 'ArrowRight') {
         setActiveIndex(i => Math.min(i + 1, tabHighlights.length - 1))
       } else if (e.key === 'ArrowLeft') {
@@ -286,7 +288,7 @@ export default function CVReviewPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [showFallback, loading, tabHighlights.length])
+  }, [showFallback, loading, useListMode, tabHighlights.length])
 
   const active = tabHighlights[activeIndex]
   const isLastImprove = tab === 'improve' && activeIndex === tabHighlights.length - 1 && tabHighlights.length >= 2
@@ -352,32 +354,36 @@ export default function CVReviewPage() {
         ))}
       </div>
 
-      {(analysisError || showFallback) && (
-        <Card className={`mb-4 ${analysisError ? '!bg-[#FEF7E8] !border-[#E8A838]' : ''}`}>
-          <p className="text-sm leading-relaxed text-[#2D2926] mb-4">
-            {analysisError ||
-              "We couldn't anchor enough highlights in your CV text — your capability profile will still give you a full picture."}
-          </p>
+      {analysisError && (
+        <Card className="mb-4 !bg-[#FEF7E8] !border-[#E8A838]">
+          <p className="text-sm leading-relaxed text-[#2D2926] mb-4">{analysisError}</p>
           <div className="flex gap-3 flex-wrap">
-            {analysisError && (
-              <Btn size="sm" variant="outline" onClick={() => {
-                setLoading(true)
-                setAnalysisError('')
-                fetchReview(cvText).then(result => {
-                  if (result.highlights?.length) {
-                    setRawHighlights(result.highlights)
-                    setAnalysisError('')
-                  } else {
-                    setAnalysisError(result.error || 'Analysis still unavailable. Try again later.')
-                  }
-                  setLoading(false)
-                })
-              }}>
-                Retry analysis
-              </Btn>
-            )}
+            <Btn size="sm" variant="outline" onClick={() => {
+              setLoading(true)
+              setAnalysisError('')
+              fetchReview(cvText).then(result => {
+                if (result.highlights?.length) {
+                  setRawHighlights(result.highlights)
+                  setAnalysisError('')
+                } else {
+                  setAnalysisError(result.error || 'Analysis still unavailable. Try again later.')
+                }
+                setLoading(false)
+              })
+            }}>
+              Retry analysis
+            </Btn>
             <Btn size="sm" onClick={skipToQuestionnaire}>Continue to questions →</Btn>
           </div>
+        </Card>
+      )}
+
+      {showFallback && !analysisError && (
+        <Card className="mb-4">
+          <p className="text-sm leading-relaxed text-[#2D2926] mb-4">
+            We couldn&apos;t generate highlights for this CV — your capability profile will still give you a full picture.
+          </p>
+          <Btn size="sm" onClick={skipToQuestionnaire}>Continue to questions →</Btn>
         </Card>
       )}
 
@@ -390,6 +396,37 @@ export default function CVReviewPage() {
             {cvText}
           </div>
         </Card>
+      ) : useListMode ? (
+        <>
+          <Card className="mb-4 !p-8 md:!p-10" style={{ maxWidth: 680, margin: '0 auto' }}>
+            <div
+              className="text-[15px] leading-[1.85] text-[#2D2926] whitespace-pre-wrap"
+              style={{ fontFamily: 'var(--font-dm-sans)' }}
+            >
+              {cvText}
+            </div>
+          </Card>
+
+          <div className="space-y-3 mb-6">
+            {tabRawHighlights.map((h, i) => (
+              <Card key={`${h.type}-${i}`}>
+                <div className="mb-2">
+                  <Badge color={tab === 'strong' ? 'teal' : 'warn'}>
+                    {CATEGORY_LABELS[h.category] || h.category}
+                  </Badge>
+                </div>
+                <blockquote className="text-sm text-[#7A756F] border-l-2 border-[#E8E3DA] pl-3 mb-3 italic leading-relaxed">
+                  &ldquo;{h.quote}&rdquo;
+                </blockquote>
+                <p className="text-[#2D2926] leading-relaxed">{h.label}</p>
+              </Card>
+            ))}
+          </div>
+
+          <div className="flex justify-end mb-6">
+            <Btn onClick={skipToQuestionnaire}>Continue to questions →</Btn>
+          </div>
+        </>
       ) : (
         <>
           <Card className="mb-4 !p-8 md:!p-10" style={{ maxWidth: 680, margin: '0 auto' }}>

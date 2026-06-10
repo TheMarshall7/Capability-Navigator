@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
 import { callGeminiJson, geminiJsonFailureMessage } from '@/lib/gemini-json'
+import { locateHighlight, repairHighlightQuote } from '@/lib/cv-highlight-locate'
 
 export const maxDuration = 60
 
@@ -45,9 +46,10 @@ interface CvHighlight {
   type: 'strong' | 'improve'
   label: string
   category: string
+  anchored?: boolean
 }
 
-function normalizeHighlights(data: unknown): CvHighlight[] {
+function normalizeHighlights(data: unknown, cvText: string): CvHighlight[] {
   if (!data || typeof data !== 'object') return []
   const raw = (data as { highlights?: unknown }).highlights
   if (!Array.isArray(raw)) return []
@@ -60,11 +62,14 @@ function normalizeHighlights(data: unknown): CvHighlight[] {
       const category = typeof h.category === 'string' && VALID_CATEGORIES.has(h.category)
         ? h.category
         : 'clarity'
+      const rawQuote = typeof h.quote === 'string' ? h.quote.trim() : ''
+      const quote = rawQuote ? repairHighlightQuote(cvText, rawQuote) : ''
       return {
-        quote: typeof h.quote === 'string' ? h.quote.trim() : '',
+        quote,
         type,
         label: typeof h.label === 'string' ? h.label.trim() : String(h.comment || '').trim(),
         category,
+        anchored: Boolean(quote && locateHighlight(cvText, quote)),
       }
     })
     .filter(h => h.quote.length >= 5 && h.label.length > 0)
@@ -119,7 +124,7 @@ export async function POST(req: NextRequest) {
         timeoutMs: 25_000,
       },
       parsed => {
-        const highlights = normalizeHighlights(parsed)
+        const highlights = normalizeHighlights(parsed, cvText)
         return highlights.length > 0 ? highlights : null
       },
     )
