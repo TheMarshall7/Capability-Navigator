@@ -77,42 +77,77 @@ export interface CvDraftContent {
   }
 }
 
-function validateDraft(data: unknown): CvDraftContent | null {
+function parseJsonContent(content: string): unknown {
+  const trimmed = content.trim()
+  const fenceMatch = trimmed.match(/^```(?:json)?\s*([\s\S]*?)```$/i)
+  const jsonStr = fenceMatch ? fenceMatch[1].trim() : trimmed
+  return JSON.parse(jsonStr)
+}
+
+function normalizeParsedDraft(data: unknown): Record<string, unknown> | null {
   if (!data || typeof data !== 'object') return null
-  const d = data as Record<string, unknown>
+  const d = { ...(data as Record<string, unknown>) }
 
-  if (typeof d.headline !== 'string' || !d.headline.trim()) return null
-  if (typeof d.summary !== 'string' || !d.summary.trim()) return null
-  if (typeof d.tailoring_notes !== 'string' || !d.tailoring_notes.trim()) return null
-  if (!d.skills || typeof d.skills !== 'object') return null
-
-  const skills = d.skills as Record<string, unknown>
-  if (!Array.isArray(skills.core) || !Array.isArray(skills.developing)) return null
-  if (!skills.core.every(s => typeof s === 'string') || !skills.developing.every(s => typeof s === 'string')) return null
-
-  if (!Array.isArray(d.experience)) return null
-  for (const exp of d.experience) {
-    if (!exp || typeof exp !== 'object') return null
-    const e = exp as Record<string, unknown>
-    if (typeof e.company !== 'string' || typeof e.title !== 'string' || typeof e.dates !== 'string') return null
-    if (!Array.isArray(e.bullets) || e.bullets.length > 5) return null
-    if (!e.bullets.every(b => typeof b === 'string' && b.trim())) return null
+  if (!d.tailoring_notes && typeof d.tailoringNotes === 'string') {
+    d.tailoring_notes = d.tailoringNotes
   }
 
+  if (!d.skills || typeof d.skills !== 'object') {
+    d.skills = { core: [], developing: [] }
+  } else {
+    const skills = d.skills as Record<string, unknown>
+    if (!Array.isArray(skills.core)) skills.core = []
+    if (!Array.isArray(skills.developing)) skills.developing = []
+    d.skills = skills
+  }
+
+  if (!Array.isArray(d.experience)) {
+    d.experience = []
+  } else {
+    d.experience = (d.experience as unknown[])
+      .filter(exp => exp && typeof exp === 'object')
+      .map(exp => {
+        const e = { ...(exp as Record<string, unknown>) }
+        const bullets = Array.isArray(e.bullets)
+          ? e.bullets.filter(b => typeof b === 'string' && b.trim()).slice(0, 5)
+          : []
+        return {
+          company: typeof e.company === 'string' && e.company.trim() ? e.company.trim() : 'Organisation',
+          title: typeof e.title === 'string' && e.title.trim() ? e.title.trim() : 'Role',
+          dates: typeof e.dates === 'string' && e.dates.trim() ? e.dates.trim() : 'Dates not specified',
+          bullets,
+        }
+      })
+  }
+
+  return d
+}
+
+function validateDraft(data: unknown): CvDraftContent | null {
+  const normalized = normalizeParsedDraft(data)
+  if (!normalized) return null
+
+  if (typeof normalized.headline !== 'string' || !normalized.headline.trim()) return null
+  if (typeof normalized.summary !== 'string' || !normalized.summary.trim()) return null
+  if (typeof normalized.tailoring_notes !== 'string' || !normalized.tailoring_notes.trim()) return null
+
+  const skills = normalized.skills as { core: unknown[]; developing: unknown[] }
+  const experience = normalized.experience as CvDraftExperience[]
+
   return {
-    headline: d.headline.trim(),
-    summary: d.summary.trim(),
-    experience: (d.experience as CvDraftExperience[]).map(e => ({
-      company: e.company.trim(),
-      title: e.title.trim(),
-      dates: e.dates.trim(),
-      bullets: e.bullets.map(b => b.trim()),
+    headline: normalized.headline.trim(),
+    summary: normalized.summary.trim(),
+    experience: experience.map(e => ({
+      company: e.company,
+      title: e.title,
+      dates: e.dates,
+      bullets: e.bullets,
     })),
     skills: {
-      core: skills.core.map(s => String(s).trim()),
-      developing: skills.developing.map(s => String(s).trim()),
+      core: skills.core.map(s => String(s).trim()).filter(Boolean),
+      developing: skills.developing.map(s => String(s).trim()).filter(Boolean),
     },
-    tailoring_notes: d.tailoring_notes.trim(),
+    tailoring_notes: (normalized.tailoring_notes as string).trim(),
   }
 }
 
@@ -174,7 +209,7 @@ async function callGemini(
       config: {
         systemInstruction: CV_BUILDER_SYSTEM_PROMPT,
         temperature: 0.5,
-        maxOutputTokens: 4000,
+        maxOutputTokens: 8192,
         responseMimeType: 'application/json',
         responseSchema: RESPONSE_SCHEMA,
         abortSignal: controller.signal,
@@ -187,19 +222,26 @@ async function callGemini(
 
     let parsed: unknown
     try {
-      parsed = JSON.parse(content)
-    } catch {
+      parsed = parseJsonContent(content)
+    } catch (parseErr) {
+      console.error('[cv-builder] JSON parse failed:', parseErr, content.slice(0, 300))
       return { draft: null, failure: 'parse' }
     }
 
     const draft = validateDraft(parsed)
-    if (!draft) return { draft: null, failure: 'validation' }
+    if (!draft) {
+      console.error('[cv-builder] Validation failed:', JSON.stringify(parsed).slice(0, 500))
+      return { draft: null, failure: 'validation' }
+    }
     return { draft }
   } catch (err: unknown) {
     clearTimeout(timeout)
-    const error = err as { name?: string }
+    const error = err as { name?: string; message?: string }
     if (error.name === 'AbortError') return { draft: null, failure: 'timeout' }
     console.error('[cv-builder] Gemini call failed:', err)
+    if (error.message?.includes('JSON') || error.message?.includes('schema')) {
+      return { draft: null, failure: 'parse' }
+    }
     return { draft: null, failure: 'validation' }
   }
 }
@@ -307,7 +349,7 @@ export async function POST(req: NextRequest) {
     })
 
     let result = await callGemini(client, userPrompt)
-    if (!result.draft) {
+    for (let attempt = 0; attempt < 2 && !result.draft; attempt++) {
       result = await callGemini(client, userPrompt)
     }
     if (!result.draft) {
