@@ -276,6 +276,7 @@ export async function POST(req: NextRequest) {
     )
 
     if (!result.ok) {
+      if (result.detail) console.error('[cv-builder] Gemini failure:', result.detail)
       const status = result.failure === 'timeout' ? 504 : result.failure === 'api_key' ? 503 : 502
       return NextResponse.json(
         { error: geminiJsonFailureMessage(result.failure) },
