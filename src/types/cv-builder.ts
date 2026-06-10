@@ -57,6 +57,25 @@ export interface CvCoverLetter {
   closing: string
 }
 
+/** Phase-1 output — core CV body without cover letter / checklist */
+export type CvDraftCore = Pick<
+  CvDraftContent,
+  | 'contact' | 'region_applied' | 'format' | 'headline' | 'summary' | 'core_skills'
+  | 'relevant_projects' | 'experience' | 'education' | 'skills' | 'gaps_addressed'
+>
+
+/** Phase-2 output — cover letter and reframing teach-back */
+export type CvDraftLetter = Pick<
+  CvDraftContent,
+  'tailoring_notes' | 'reframing_examples' | 'cover_letter'
+>
+
+/** Phase-3 output — ATS checklist and keyword mapping */
+export type CvDraftChecklistPart = Pick<
+  CvDraftContent,
+  'optimization_checklist' | 'keyword_mapping'
+>
+
 export interface CvDraftContent {
   contact: CvContact
   region_applied: CvRegion

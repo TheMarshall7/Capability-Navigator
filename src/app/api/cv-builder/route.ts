@@ -5,10 +5,14 @@ import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
 import { callGeminiJson, geminiJsonFailureMessage } from '@/lib/gemini-json'
 import {
   CV_BUILDER_CORE_PROMPT,
-  CV_BUILDER_SUPPLEMENT_PROMPT,
+  CV_BUILDER_LETTER_PROMPT,
+  CV_BUILDER_CHECKLIST_PROMPT,
 } from '@/lib/prompts/cv-builder-system'
 import type {
   CvDraftContent,
+  CvDraftCore,
+  CvDraftLetter,
+  CvDraftChecklistPart,
   CvRegion,
   CvExperience,
   CvEducation,
@@ -27,20 +31,16 @@ const RATE_LIMIT = 3
 const WINDOW_MS = 60 * 60 * 1000
 const MAX_HISTORY_CHARS = 8_000
 const MAX_JD_CHARS = 4_000
-const ROUTE_BUDGET_MS = 58_000
-const PHASE1_TIMEOUT_MS = 36_000
-const PHASE2_TIMEOUT_MS = 20_000
+/** Each phase is a separate API call — full 58s budget per call */
+const PHASE_TIMEOUT_MS = 58_000
 
-type CvDraftCore = Pick<
-  CvDraftContent,
-  | 'contact' | 'region_applied' | 'format' | 'headline' | 'summary' | 'core_skills'
-  | 'relevant_projects' | 'experience' | 'education' | 'skills' | 'gaps_addressed'
->
+type BuilderPhase = 'core' | 'letter' | 'finalize'
 
-type CvDraftSupplement = Pick<
-  CvDraftContent,
-  'tailoring_notes' | 'reframing_examples' | 'keyword_mapping' | 'optimization_checklist' | 'cover_letter'
->
+const GEMINI_PHASE_CONFIG = {
+  timeoutMs: PHASE_TIMEOUT_MS,
+  totalTimeoutMs: PHASE_TIMEOUT_MS,
+  maxAttempts: 1,
+} as const
 
 const VALID_REGIONS = new Set<CvRegion>(['UK', 'US', 'Canada', 'EU', 'Australia', 'International'])
 
@@ -257,7 +257,7 @@ function validateCoreLenient(data: unknown): CvDraftCore | null {
   }
 }
 
-function validateSupplement(data: unknown): CvDraftSupplement | null {
+function validateLetter(data: unknown): CvDraftLetter | null {
   if (!data || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
 
@@ -269,17 +269,23 @@ function validateSupplement(data: unknown): CvDraftSupplement | null {
   }
   if (!cover_letter.opening) return null
 
-  const checklist = normalizeChecklist(d.optimization_checklist)
-  if (checklist.length < 5) return null
-
   return {
     tailoring_notes: typeof d.tailoring_notes === 'string' && d.tailoring_notes.trim()
       ? d.tailoring_notes.trim()
       : 'Your experience was reframed using capability language for your target pathway.',
     reframing_examples: normalizeReframing(d.reframing_examples),
-    keyword_mapping: normalizeKeywordMapping(d.keyword_mapping),
-    optimization_checklist: checklist,
     cover_letter,
+  }
+}
+
+function validateChecklistPart(data: unknown): CvDraftChecklistPart | null {
+  if (!data || typeof data !== 'object') return null
+  const d = data as Record<string, unknown>
+  const checklist = normalizeChecklist(d.optimization_checklist)
+  if (checklist.length < 5) return null
+  return {
+    optimization_checklist: checklist,
+    keyword_mapping: normalizeKeywordMapping(d.keyword_mapping),
   }
 }
 
@@ -291,12 +297,10 @@ const DEFAULT_CHECKLIST: CvChecklistItem[] = [
   { item: 'Bullets start with strong action verbs', passed: false, note: 'Some bullets may need strengthening' },
 ]
 
-function defaultSupplement(targetRole: string): CvDraftSupplement {
+function defaultLetter(targetRole: string): CvDraftLetter {
   return {
     tailoring_notes: 'Your experience was reframed using capability language for your target pathway.',
     reframing_examples: [],
-    keyword_mapping: [],
-    optimization_checklist: DEFAULT_CHECKLIST,
     cover_letter: {
       opening: `I am applying for ${targetRole} roles, bringing transferable experience from my previous career and a deliberate investment in this transition.`,
       body: '',
@@ -305,7 +309,14 @@ function defaultSupplement(targetRole: string): CvDraftSupplement {
   }
 }
 
-function buildSupplementUserPrompt(
+function defaultChecklistPart(): CvDraftChecklistPart {
+  return {
+    optimization_checklist: DEFAULT_CHECKLIST,
+    keyword_mapping: [],
+  }
+}
+
+function buildCvContextPrompt(
   core: CvDraftCore,
   data: { pathwayTitle: string; targetRole: string; jobDescription?: string },
 ): string {
@@ -313,20 +324,22 @@ function buildSupplementUserPrompt(
     .map(e => `- ${e.title} at ${e.company} (${e.dates}): ${e.bullets.slice(0, 2).join(' ')}`)
     .join('\n')
   const jdSection = data.jobDescription
-    ? `\nJOB DESCRIPTION (mirror keywords in keyword_mapping where truthful):\n${data.jobDescription}\n`
-    : '\nNo job description provided — return keyword_mapping as empty array.\n'
+    ? `\nJOB DESCRIPTION:\n${data.jobDescription}\n`
+    : ''
 
   return `TARGET PATHWAY: ${data.pathwayTitle}
 TARGET ROLE: ${data.targetRole}
 ${jdSection}
-GENERATED CV TO SUPPLEMENT:
+GENERATED CV:
 Headline: ${core.headline}
 Summary: ${core.summary}
 Core skills: ${core.core_skills.join(', ')}
 Experience:
-${expSummary}
+${expSummary}`
+}
 
-Write tailoring_notes, 2 reframing_examples, 8-item optimization_checklist, cover_letter, and keyword_mapping.`
+function parseCoreFromBody(body: Record<string, unknown>): CvDraftCore | null {
+  return validateCoreLenient(body.core) ?? validateCoreDraft(body.core)
 }
 
 function buildUserPrompt(data: {
@@ -388,14 +401,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorised' }, { status: 401 })
     }
 
-    const limit = rateLimit(`cv-builder:${user.id}`, RATE_LIMIT, WINDOW_MS)
-    if (!limit.allowed) {
-      return NextResponse.json(
-        { error: `Too many generations. You can build ${RATE_LIMIT} CVs per hour. Try again in ${limit.retryAfter} seconds.` },
-        { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } }
-      )
-    }
-
     if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({ error: 'AI service unavailable' }, { status: 503 })
     }
@@ -405,6 +410,19 @@ export async function POST(req: NextRequest) {
       body = await req.json()
     } catch {
       return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
+
+    const phase: BuilderPhase =
+      body.phase === 'letter' || body.phase === 'finalize' ? body.phase : 'core'
+
+    if (phase === 'core') {
+      const limit = rateLimit(`cv-builder:${user.id}`, RATE_LIMIT, WINDOW_MS)
+      if (!limit.allowed) {
+        return NextResponse.json(
+          { error: `Too many generations. You can build ${RATE_LIMIT} CVs per hour. Try again in ${limit.retryAfter} seconds.` },
+          { status: 429, headers: { 'Retry-After': String(limit.retryAfter) } }
+        )
+      }
     }
 
     const pathwayId = body.pathwayId
@@ -419,7 +437,7 @@ export async function POST(req: NextRequest) {
     if (typeof pathwayId !== 'string' || !pathwayId) {
       return NextResponse.json({ error: 'pathwayId is required' }, { status: 400 })
     }
-    if (!historyText) {
+    if (phase === 'core' && !historyText) {
       return NextResponse.json({ error: 'Work history text is required' }, { status: 400 })
     }
 
@@ -475,81 +493,121 @@ export async function POST(req: NextRequest) {
       missingSkills: pathway.missing_skills_json || [],
     })
 
-    const routeStarted = Date.now()
-
-    const coreResult = await callGeminiJson(
-      client,
-      getGeminiModel(),
-      {
-        systemInstruction: CV_BUILDER_CORE_PROMPT,
-        userPrompt,
-        temperature: 0.5,
-        maxOutputTokens: 4096,
-        timeoutMs: PHASE1_TIMEOUT_MS,
-        totalTimeoutMs: PHASE1_TIMEOUT_MS,
-        maxAttempts: 1,
-      },
-      (raw) => validateCoreDraft(raw) ?? validateCoreLenient(raw),
-      1,
-    )
-
-    if (!coreResult.ok) {
-      if (coreResult.detail) console.error('[cv-builder] Core phase failure:', coreResult.detail)
-      const status = coreResult.failure === 'timeout' ? 504 : coreResult.failure === 'api_key' ? 503 : 502
-      return NextResponse.json(
-        { error: geminiJsonFailureMessage(coreResult.failure, coreResult.detail) },
-        { status },
-      )
+    const roleLabel = targetRole || pathway.title
+    const inputs = {
+      name,
+      location,
+      targetRole: roleLabel,
+      targetRegion,
+      historyText,
+      jobDescription: jobDescription || undefined,
     }
 
-    const roleLabel = targetRole || pathway.title
-    let supplement = defaultSupplement(roleLabel)
-    const phase2Budget = ROUTE_BUDGET_MS - (Date.now() - routeStarted) - 1_000
+    const contextMeta = {
+      pathwayTitle: pathway.title,
+      targetRole: roleLabel,
+      jobDescription: jobDescription ? jobDescription.slice(0, MAX_JD_CHARS) : undefined,
+    }
 
-    if (phase2Budget >= 8_000) {
-      const supplementPrompt = buildSupplementUserPrompt(coreResult.data, {
-        pathwayTitle: pathway.title,
-        targetRole: roleLabel,
-        jobDescription: jobDescription ? jobDescription.slice(0, MAX_JD_CHARS) : undefined,
-      })
-      const phase2Timeout = Math.min(PHASE2_TIMEOUT_MS, phase2Budget)
-
-      const supplementResult = await callGeminiJson(
+    // ── Phase 1: core CV ──────────────────────────────────────────────────────
+    if (phase === 'core') {
+      const coreResult = await callGeminiJson(
         client,
         getGeminiModel(),
         {
-          systemInstruction: CV_BUILDER_SUPPLEMENT_PROMPT,
-          userPrompt: supplementPrompt,
+          systemInstruction: CV_BUILDER_CORE_PROMPT,
+          userPrompt,
           temperature: 0.5,
-          maxOutputTokens: 2048,
-          timeoutMs: phase2Timeout,
-          totalTimeoutMs: phase2Timeout,
-          maxAttempts: 1,
+          maxOutputTokens: 6144,
+          ...GEMINI_PHASE_CONFIG,
         },
-        (raw) => validateSupplement(raw) ?? defaultSupplement(roleLabel),
+        (raw) => validateCoreDraft(raw) ?? validateCoreLenient(raw),
         1,
       )
 
-      if (supplementResult.ok) {
-        supplement = supplementResult.data
-      } else {
-        console.warn('[cv-builder] Supplement phase failed, using defaults:', supplementResult.detail)
+      if (!coreResult.ok) {
+        if (coreResult.detail) console.error('[cv-builder] Core phase failure:', coreResult.detail)
+        const status = coreResult.failure === 'timeout' ? 504 : coreResult.failure === 'api_key' ? 503 : 502
+        return NextResponse.json(
+          { error: geminiJsonFailureMessage(coreResult.failure, coreResult.detail) },
+          { status },
+        )
       }
+
+      return NextResponse.json({ phase: 'core', core: coreResult.data, roleLabel, pathwayTitle: pathway.title })
+    }
+
+    const coreData = parseCoreFromBody(body)
+    if (!coreData) {
+      return NextResponse.json({ error: 'Invalid core CV data' }, { status: 400 })
+    }
+
+    const contextPrompt = buildCvContextPrompt(coreData, contextMeta)
+
+    // ── Phase 2: cover letter + reframing ─────────────────────────────────────
+    if (phase === 'letter') {
+      const letterResult = await callGeminiJson(
+        client,
+        getGeminiModel(),
+        {
+          systemInstruction: CV_BUILDER_LETTER_PROMPT,
+          userPrompt: `${contextPrompt}\n\nWrite tailoring_notes, 2 reframing_examples, and cover_letter.`,
+          temperature: 0.5,
+          maxOutputTokens: 3072,
+          ...GEMINI_PHASE_CONFIG,
+        },
+        (raw) => validateLetter(raw) ?? defaultLetter(roleLabel),
+        1,
+      )
+
+      if (!letterResult.ok) {
+        if (letterResult.detail) console.error('[cv-builder] Letter phase failure:', letterResult.detail)
+        const status = letterResult.failure === 'timeout' ? 504 : letterResult.failure === 'api_key' ? 503 : 502
+        return NextResponse.json(
+          { error: geminiJsonFailureMessage(letterResult.failure, letterResult.detail) },
+          { status },
+        )
+      }
+
+      return NextResponse.json({ phase: 'letter', letter: letterResult.data })
+    }
+
+    // ── Phase 3: checklist + save ─────────────────────────────────────────────
+    const letterRaw = body.letter as Record<string, unknown> | undefined
+    const letterData = letterRaw
+      ? (validateLetter(letterRaw) ?? defaultLetter(roleLabel))
+      : defaultLetter(roleLabel)
+
+    const jdNote = contextMeta.jobDescription
+      ? 'Mirror JD keywords in keyword_mapping where truthful.'
+      : 'Return keyword_mapping as empty array.'
+
+    let checklistPart = defaultChecklistPart()
+    const checklistResult = await callGeminiJson(
+      client,
+      getGeminiModel(),
+      {
+        systemInstruction: CV_BUILDER_CHECKLIST_PROMPT,
+        userPrompt: `${contextPrompt}\n\n${jdNote} Write 8-item optimization_checklist and keyword_mapping.`,
+        temperature: 0.5,
+        maxOutputTokens: 2048,
+        ...GEMINI_PHASE_CONFIG,
+      },
+      (raw) => validateChecklistPart(raw) ?? defaultChecklistPart(),
+      1,
+    )
+
+    if (checklistResult.ok) {
+      checklistPart = checklistResult.data
     } else {
-      console.warn('[cv-builder] Skipping supplement phase — insufficient time budget')
+      console.warn('[cv-builder] Checklist phase failed, using defaults:', checklistResult.detail)
     }
 
     const draft: CvDraftContent = {
-      ...coreResult.data,
-      ...supplement,
-      _inputs: {
-        name,
-        location,
-        targetRole: targetRole || pathway.title,
-        targetRegion,
-        historyText,
-        jobDescription: jobDescription || undefined,
-      },
+      ...coreData,
+      ...letterData,
+      ...checklistPart,
+      _inputs: inputs,
     }
 
     const { error: upsertError } = await supabase.from('cv_drafts').upsert({

@@ -7,7 +7,8 @@ import { Card } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { Textarea } from '@/components/ui/Textarea'
 import CVPreview from '@/components/CVPreview'
-import type { CvDraftContent, CvRegion } from '@/types/cv-builder'
+import { CvBuilderGenerationProgress } from '@/components/CvBuilderGenerationProgress'
+import type { CvDraftContent, CvDraftCore, CvDraftLetter, CvRegion } from '@/types/cv-builder'
 
 interface Pathway {
   id: string
@@ -135,6 +136,7 @@ function CVBuilderContent() {
   const [showJdInput, setShowJdInput] = useState(false)
 
   const [generating, setGenerating] = useState(false)
+  const [generatingPhase, setGeneratingPhase] = useState(0)
   const [error, setError] = useState('')
   const [warning, setWarning] = useState('')
   const [loadError, setLoadError] = useState('')
@@ -289,39 +291,93 @@ function CVBuilderContent() {
     }
   }
 
+  const buildPayload = useCallback(() => ({
+    pathwayId,
+    name,
+    location,
+    targetRole,
+    targetRegion,
+    historyText,
+    jobDescription: jobDescription.trim() || undefined,
+  }), [pathwayId, name, location, targetRole, targetRegion, historyText, jobDescription])
+
   const generate = async () => {
     if (!historyText.trim()) {
       setError('Please add your work history before building.')
       return
     }
     setGenerating(true)
+    setGeneratingPhase(1)
     setError('')
     setWarning('')
     setConfirmRegenerate(false)
 
     try {
-      const res = await fetch('/api/cv-builder', {
+      const basePayload = buildPayload()
+
+      const coreRes = await fetch('/api/cv-builder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...basePayload, phase: 'core' }),
+      })
+
+      let coreData: { core?: CvDraftCore; error?: string }
+      try {
+        coreData = await coreRes.json()
+      } catch {
+        throw new Error(`Server returned an invalid response (${coreRes.status}). Please try again.`)
+      }
+
+      if (!coreRes.ok) throw new Error(coreData.error || `Request failed (${coreRes.status})`)
+      if (!coreData.core?.headline && !coreData.core?.summary) {
+        throw new Error('Received an invalid CV from the server. Please try again.')
+      }
+
+      setGeneratingPhase(2)
+
+      const letterRes = await fetch('/api/cv-builder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pathwayId,
-          name,
-          location,
-          targetRole,
-          targetRegion,
-          historyText,
-          jobDescription: jobDescription.trim() || undefined,
+          ...basePayload,
+          phase: 'letter',
+          core: coreData.core,
+        }),
+      })
+
+      let letterData: { letter?: CvDraftLetter; error?: string }
+      try {
+        letterData = await letterRes.json()
+      } catch {
+        throw new Error(`Server returned an invalid response (${letterRes.status}). Please try again.`)
+      }
+
+      if (!letterRes.ok) throw new Error(letterData.error || `Request failed (${letterRes.status})`)
+      if (!letterData.letter?.cover_letter?.opening) {
+        throw new Error('Received an invalid cover letter from the server. Please try again.')
+      }
+
+      setGeneratingPhase(3)
+
+      const finalRes = await fetch('/api/cv-builder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...basePayload,
+          phase: 'finalize',
+          core: coreData.core,
+          letter: letterData.letter,
         }),
       })
 
       let data: { draft?: unknown; error?: string; warning?: string; saved?: boolean }
       try {
-        data = await res.json()
+        data = await finalRes.json()
       } catch {
-        throw new Error(`Server returned an invalid response (${res.status}). Please try again.`)
+        throw new Error(`Server returned an invalid response (${finalRes.status}). Please try again.`)
       }
 
-      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`)
+      if (!finalRes.ok) throw new Error(data.error || `Request failed (${finalRes.status})`)
       if (!isValidDraft(data.draft)) throw new Error('Received an invalid CV from the server. Please try again.')
 
       const content = 'region_applied' in (data.draft as object)
@@ -335,6 +391,7 @@ function CVBuilderContent() {
       setError(err instanceof Error ? err.message : 'Failed to generate CV. Please try again.')
     } finally {
       setGenerating(false)
+      setGeneratingPhase(0)
     }
   }
 
@@ -380,6 +437,9 @@ function CVBuilderContent() {
 
   return (
     <div className="max-w-[900px] mx-auto px-6 py-10">
+      {generating && generatingPhase > 0 && (
+        <CvBuilderGenerationProgress phase={generatingPhase} />
+      )}
       <div className="mb-8">
         <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>CV Builder</h1>
         <p className="text-[#7A756F] text-sm leading-relaxed">

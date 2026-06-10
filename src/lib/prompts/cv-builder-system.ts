@@ -142,15 +142,13 @@ JSON SHAPE (return exactly this — nothing else):
   "gaps_addressed": [{ "period": "string", "explanation": "string" }]
 }`
 
-/** Phase 2: cover letter + teach-back — small JSON, ~20s */
-export const CV_BUILDER_SUPPLEMENT_PROMPT = `You write the supplement for an already-generated career-change CV on Capability Navigator. Return ONLY valid JSON.
+/** Phase 2: cover letter + reframing teach-back */
+export const CV_BUILDER_LETTER_PROMPT = `You write the cover letter and reframing teach-back for an already-generated career-change CV on Capability Navigator. Return ONLY valid JSON.
 
 Given the CV context in the user message, produce:
 - tailoring_notes: 2 sentences on what was reframed and why
 - reframing_examples: exactly 2 before/after pairs from the candidate's real history
-- optimization_checklist: exactly 8 pass/fail items (hybrid format, ATS-safe, headings, dates, action verbs, career-change summary, region conventions, cover letter pivot)
 - cover_letter: 3 paragraphs (3–4 sentences each) explaining the career pivot
-- keyword_mapping: max 6 items if a job description was provided; else []
 
 NEVER fabricate. Use target-pathway vocabulary.
 
@@ -158,7 +156,18 @@ JSON SHAPE:
 {
   "tailoring_notes": "string",
   "reframing_examples": [{ "before": "string", "after": "string", "why": "string" }],
+  "cover_letter": { "opening": "string", "body": "string", "closing": "string" }
+}`
+
+/** Phase 3: ATS checklist + keyword mapping */
+export const CV_BUILDER_CHECKLIST_PROMPT = `You complete the ATS optimization review for an already-generated career-change CV on Capability Navigator. Return ONLY valid JSON.
+
+Given the CV context in the user message, produce:
+- optimization_checklist: exactly 8 pass/fail items (hybrid format, ATS-safe, headings, dates, action verbs, career-change summary, region conventions, cover letter pivot)
+- keyword_mapping: max 6 items if a job description was provided; else []
+
+JSON SHAPE:
+{
   "optimization_checklist": [{ "item": "string", "passed": true | false, "note": "optional" }],
-  "cover_letter": { "opening": "string", "body": "string", "closing": "string" },
   "keyword_mapping": [{ "jd_keyword": "string", "evidence_in_cv": "string" }]
 }`
