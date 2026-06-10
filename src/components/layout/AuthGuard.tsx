@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 
 const PROTECTED = [
-  '/dashboard', '/cv-upload', '/questionnaire',
+  '/dashboard', '/cv-upload', '/cv-review', '/cv-builder', '/questionnaire',
   '/generating', '/profile', '/pathways',
   '/roadmap', '/feedback', '/share', '/settings',
   '/coach', '/outcome',

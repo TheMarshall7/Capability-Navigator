@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase-browser'
 import { Btn } from '@/components/ui/Btn'
 import type { User } from '@supabase/supabase-js'
 
-const PROTECTED = ['/dashboard', '/cv-upload', '/questionnaire', '/generating', '/profile', '/pathways', '/roadmap', '/feedback', '/share', '/settings']
+const PROTECTED = ['/dashboard', '/cv-upload', '/cv-review', '/cv-builder', '/questionnaire', '/generating', '/profile', '/pathways', '/roadmap', '/feedback', '/share', '/settings', '/coach', '/outcome']
 
 export default function Nav() {
   const [user, setUser] = useState<User | null>(null)

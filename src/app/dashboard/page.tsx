@@ -93,6 +93,24 @@ export default async function DashboardPage() {
       {/* Career velocity widget */}
       <CareerVelocity />
 
+      {/* CV Review — shown when CV uploaded */}
+      {cvData && (
+        <Link href="/cv-review" className="no-underline block mb-5">
+          <Card className="!border-l-4 !border-l-[#7C6AF0] hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <div className="text-2xl mb-2">◎</div>
+                <div className="font-semibold mb-1">CV analyzer</div>
+                <div className="text-xs text-[#7A756F] leading-relaxed">
+                  See what&apos;s strong in your CV and what to improve — highlighted in your actual text.
+                </div>
+              </div>
+              <span className="text-sm font-medium flex-shrink-0" style={{ color: '#7C6AF0' }}>Open analyzer →</span>
+            </div>
+          </Card>
+        </Link>
+      )}
+
       {/* CV Builder — shown when profile + pathways exist */}
       {reportData && pathwaysData && (
         <Link href={`/cv-builder?pathwayId=${pathwaysData.id}`} className="no-underline block mb-5">
@@ -178,6 +196,7 @@ export default async function DashboardPage() {
         <div className="font-semibold mb-4 text-sm">Quick actions</div>
         <div className="flex flex-wrap gap-2">
           <Link href="/cv-upload"><Btn variant="outline" size="sm">{cvData ? '↑ Update CV' : '↑ Upload CV'}</Btn></Link>
+          {cvData && <Link href="/cv-review"><Btn variant="outline" size="sm">◎ CV analyzer</Btn></Link>}
           <Link href="/questionnaire"><Btn variant="outline" size="sm">✎ {questionnaireComplete ? 'Edit answers' : 'Start questionnaire'}</Btn></Link>
           {reportData && <Link href="/generating"><Btn variant="outline" size="sm">⟳ Regenerate profile</Btn></Link>}
           {reportData && !feedbackData && <Link href="/feedback"><Btn variant="outline" size="sm">◆ Give feedback</Btn></Link>}

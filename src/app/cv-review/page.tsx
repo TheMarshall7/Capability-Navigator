@@ -121,6 +121,7 @@ export default function CVReviewPage() {
   const [tab, setTab] = useState<Tab>('strong')
   const [activeIndex, setActiveIndex] = useState(0)
   const [showFallback, setShowFallback] = useState(false)
+  const [analysisError, setAnalysisError] = useState('')
   const [loadError, setLoadError] = useState('')
 
   const skipToQuestionnaire = useCallback(() => {
@@ -229,12 +230,15 @@ export default function CVReviewPage() {
         if (cancelled) return
 
         if (!highlights) {
-          if (reviewError) console.warn('[cv-review] Skipping —', reviewError)
-          skipToQuestionnaire()
-          return
+          setAnalysisError(
+            reviewError ||
+            'AI analysis is unavailable — check GEMINI_API_KEY is set in your environment.',
+          )
+          setRawHighlights([])
+        } else {
+          setAnalysisError('')
+          setRawHighlights(highlights)
         }
-
-        setRawHighlights(highlights)
       } catch (err: unknown) {
         if (!cancelled) {
           setLoadError(err instanceof Error ? err.message : 'Failed to load CV review.')
@@ -348,12 +352,43 @@ export default function CVReviewPage() {
         ))}
       </div>
 
-      {showFallback ? (
-        <Card className="mb-6 text-center py-10">
-          <p className="text-[#7A756F] leading-relaxed max-w-md mx-auto mb-6">
-            We couldn&apos;t anchor enough highlights in your CV text — your capability profile will still give you a full picture.
+      {(analysisError || showFallback) && (
+        <Card className={`mb-4 ${analysisError ? '!bg-[#FEF7E8] !border-[#E8A838]' : ''}`}>
+          <p className="text-sm leading-relaxed text-[#2D2926] mb-4">
+            {analysisError ||
+              "We couldn't anchor enough highlights in your CV text — your capability profile will still give you a full picture."}
           </p>
-          <Btn onClick={skipToQuestionnaire}>Continue to questions →</Btn>
+          <div className="flex gap-3 flex-wrap">
+            {analysisError && (
+              <Btn size="sm" variant="outline" onClick={() => {
+                setLoading(true)
+                setAnalysisError('')
+                fetchReview(cvText).then(result => {
+                  if (result.highlights?.length) {
+                    setRawHighlights(result.highlights)
+                    setAnalysisError('')
+                  } else {
+                    setAnalysisError(result.error || 'Analysis still unavailable. Try again later.')
+                  }
+                  setLoading(false)
+                })
+              }}>
+                Retry analysis
+              </Btn>
+            )}
+            <Btn size="sm" onClick={skipToQuestionnaire}>Continue to questions →</Btn>
+          </div>
+        </Card>
+      )}
+
+      {showFallback || analysisError ? (
+        <Card className="mb-6 !p-8 md:!p-10" style={{ maxWidth: 680, margin: '0 auto' }}>
+          <div
+            className="text-[15px] leading-[1.85] text-[#2D2926] whitespace-pre-wrap"
+            style={{ fontFamily: 'var(--font-dm-sans)' }}
+          >
+            {cvText}
+          </div>
         </Card>
       ) : (
         <>
