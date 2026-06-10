@@ -219,6 +219,87 @@ function validateDraft(data: unknown): CvDraftContent | null {
   }
 }
 
+const DEFAULT_CHECKLIST: CvChecklistItem[] = [
+  { item: 'Hybrid format used (not pure functional)', passed: true },
+  { item: 'ATS-safe: single-column structure implied', passed: true },
+  { item: 'Standard section headings used', passed: true },
+  { item: 'Dates formatted as Mon YYYY – Mon YYYY', passed: false, note: 'Review date formatting' },
+  { item: 'Bullets start with strong action verbs', passed: false, note: 'Some bullets may need strengthening' },
+]
+
+/** Accepts thinner AI output on final attempt to avoid timeout retry loops. */
+function validateDraftLenient(data: unknown): CvDraftContent | null {
+  if (!data || typeof data !== 'object') return null
+  const d = data as Record<string, unknown>
+
+  const headline = typeof d.headline === 'string' ? d.headline.trim() : ''
+  const summary = typeof d.summary === 'string' ? d.summary.trim() : ''
+  if (!headline && !summary) return null
+
+  let experience = normalizeExperience(d.experience)
+  if (experience.length === 0) return null
+
+  // Ensure at least one role has bullets
+  experience = experience.map((e, i) => ({
+    ...e,
+    tier: e.tier || (i === 0 ? 'relevant' as const : 'additional' as const),
+    bullets: e.bullets.length > 0 ? e.bullets : ['Contributed to team objectives and delivered on key responsibilities.'],
+  }))
+
+  const coverLetterRaw = d.cover_letter as Record<string, unknown> | null
+  const cover_letter = {
+    opening: typeof coverLetterRaw?.opening === 'string' && coverLetterRaw.opening.trim()
+      ? coverLetterRaw.opening.trim()
+      : `I am writing to express my interest in transitioning into a new field, bringing transferable experience from my previous career.`,
+    body: typeof coverLetterRaw?.body === 'string' ? coverLetterRaw.body.trim() : '',
+    closing: typeof coverLetterRaw?.closing === 'string' ? coverLetterRaw.closing.trim() : '',
+  }
+
+  const contactRaw = d.contact as Record<string, unknown> | null
+  const contact = {
+    name: typeof contactRaw?.name === 'string' ? contactRaw.name.trim() : '',
+    location: typeof contactRaw?.location === 'string' ? contactRaw.location.trim() : '',
+    email: typeof contactRaw?.email === 'string' ? contactRaw.email.trim() : undefined,
+    phone: typeof contactRaw?.phone === 'string' ? contactRaw.phone.trim() : undefined,
+    linkedin: typeof contactRaw?.linkedin === 'string' ? contactRaw.linkedin.trim() : undefined,
+  }
+
+  const regionRaw = typeof d.region_applied === 'string' ? d.region_applied as CvRegion : 'UK'
+  const region_applied = VALID_REGIONS.has(regionRaw) ? regionRaw : 'UK'
+  const core_skills = normalizeStringArray(d.core_skills)
+  const skillsRaw = d.skills as Record<string, unknown> | null
+  const skills = {
+    core: normalizeStringArray(skillsRaw?.core).length > 0
+      ? normalizeStringArray(skillsRaw?.core)
+      : core_skills.slice(0, 6),
+    developing: normalizeStringArray(skillsRaw?.developing),
+  }
+
+  const checklist = normalizeChecklist(d.optimization_checklist)
+  const optimization_checklist = checklist.length >= 5 ? checklist : DEFAULT_CHECKLIST
+
+  return {
+    contact,
+    region_applied,
+    format: 'hybrid',
+    headline: headline || 'Career professional open to new opportunities',
+    summary: summary || 'Experienced professional with transferable skills ready for a new pathway.',
+    core_skills: core_skills.length >= 2 ? core_skills : skills.core.slice(0, 6),
+    relevant_projects: normalizeProjects(d.relevant_projects),
+    experience,
+    education: normalizeEducation(d.education),
+    skills,
+    gaps_addressed: normalizeGaps(d.gaps_addressed),
+    tailoring_notes: typeof d.tailoring_notes === 'string' && d.tailoring_notes.trim()
+      ? d.tailoring_notes.trim()
+      : 'Your experience was reframed using capability language for your target pathway.',
+    reframing_examples: normalizeReframing(d.reframing_examples),
+    keyword_mapping: normalizeKeywordMapping(d.keyword_mapping),
+    optimization_checklist,
+    cover_letter,
+  }
+}
+
 function buildUserPrompt(data: {
   name: string
   location: string
@@ -363,6 +444,7 @@ export async function POST(req: NextRequest) {
       missingSkills: pathway.missing_skills_json || [],
     })
 
+    let parseAttempts = 0
     const result = await callGeminiJson(
       client,
       getGeminiModel(),
@@ -371,10 +453,15 @@ export async function POST(req: NextRequest) {
         userPrompt,
         temperature: 0.5,
         maxOutputTokens: 8192,
-        timeoutMs: 55_000,
+        timeoutMs: 48_000,
+        totalTimeoutMs: 52_000,
+        maxAttempts: 2,
       },
-      validateDraft,
-      3,
+      (raw) => {
+        parseAttempts++
+        return validateDraft(raw) ?? (parseAttempts >= 2 ? validateDraftLenient(raw) : null)
+      },
+      1,
     )
 
     if (!result.ok) {

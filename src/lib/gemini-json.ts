@@ -21,7 +21,12 @@ export type GeminiJsonConfig = {
   userPrompt: string
   temperature?: number
   maxOutputTokens?: number
+  /** Per-attempt timeout (ms). Capped by remaining total budget when set. */
   timeoutMs?: number
+  /** Wall-clock budget for all attempts combined. Prevents Vercel 504s from retry stacking. */
+  totalTimeoutMs?: number
+  /** Max API calls across all models. Defaults to models.length × attemptsPerModel. */
+  maxAttempts?: number
 }
 
 export type GeminiJsonFailure = 'timeout' | 'empty' | 'parse' | 'api' | 'api_key' | 'quota' | 'model'
@@ -153,16 +158,30 @@ export async function callGeminiJson<T>(
   attemptsPerModel = 2,
 ): Promise<GeminiJsonResult<T>> {
   const models = getGeminiModelCandidates()
-  const timeoutMs = config.timeoutMs ?? 25_000
+  const perAttemptMs = config.timeoutMs ?? 25_000
+  const totalBudgetMs = config.totalTimeoutMs ?? Infinity
+  const maxAttempts = config.maxAttempts ?? models.length * attemptsPerModel
   const modes: boolean[] = [false, true]
+  const startedAt = Date.now()
   let lastFailure: GeminiJsonFailure = 'api'
   let lastDetail = ''
+  let apiCalls = 0
 
   for (const model of models) {
     for (let i = 0; i < attemptsPerModel; i++) {
+      if (apiCalls >= maxAttempts) break
+
+      const elapsed = Date.now() - startedAt
+      const remaining = totalBudgetMs - elapsed
+      if (remaining < 3_000) {
+        return { ok: false, failure: 'timeout', detail: 'total budget exceeded before next attempt' }
+      }
+
+      const attemptTimeoutMs = Math.min(perAttemptMs, remaining - 500)
       const jsonMode = modes[Math.min(i, modes.length - 1)]
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), timeoutMs)
+      const timeout = setTimeout(() => controller.abort(), attemptTimeoutMs)
+      apiCalls++
 
       try {
         const content = await generateStreamText(client, model, config, jsonMode, controller.signal)
@@ -193,6 +212,7 @@ export async function callGeminiJson<T>(
         }
       }
     }
+    if (apiCalls >= maxAttempts) break
   }
 
   return { ok: false, failure: lastFailure, detail: lastDetail }

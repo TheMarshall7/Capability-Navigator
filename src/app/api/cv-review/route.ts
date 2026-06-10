@@ -241,6 +241,60 @@ function validateReview(
   }
 }
 
+function validateReviewLenient(
+  data: unknown,
+  cvText: string,
+  hasPathway: boolean,
+): CvReviewResult | null {
+  if (!data || typeof data !== 'object') return null
+  const d = data as Record<string, unknown>
+
+  const overview = normalizeOverview(d.overview)
+  if (!overview) return null
+
+  const highlights = normalizeHighlights(d, cvText)
+  if (highlights.length < 4) return null
+
+  const career_change = normalizeCareerChange(d.career_change) ?? {
+    format: 'unclear' as const,
+    summary_quality: 'Summary could not be fully assessed — review the Professional Summary section manually.',
+    transition_evidence: 'Transition evidence was not clearly identified in this review.',
+    jargon_translation_needed: true,
+    cover_letter_recommended: true,
+  }
+
+  const checklist = normalizeChecklist(d.optimization_checklist)
+  const optimization_checklist = checklist.length >= 5 ? checklist : [
+    { item: 'Hybrid format used (not pure functional)', passed: false, note: 'Could not verify' },
+    { item: 'Standard section headings used', passed: false },
+    { item: 'Bullets start with strong action verbs', passed: false },
+    { item: 'Career-change pivot addressed in summary', passed: false },
+    { item: 'Timeline complete — no unexplained gaps', passed: false },
+  ]
+
+  const reframing_opportunities = normalizeReframing(d.reframing_opportunities)
+  const keyword_gaps = normalizeKeywordGaps(d.keyword_gaps)
+
+  const regionRaw = typeof d.region_inferred === 'string' ? d.region_inferred : ''
+  const region_inferred = VALID_REGIONS.has(regionRaw as CvRegionInferred)
+    ? (regionRaw as CvRegionInferred)
+    : undefined
+
+  return {
+    overview,
+    sections: normalizeSections(d.sections),
+    highlights,
+    region_inferred,
+    regional_notes: typeof d.regional_notes === 'string' ? d.regional_notes.trim() : undefined,
+    career_change,
+    ats_risks: normalizeAtsRisks(d.ats_risks).length > 0 ? normalizeAtsRisks(d.ats_risks) : undefined,
+    reframing_opportunities: reframing_opportunities.length > 0 ? reframing_opportunities : undefined,
+    optimization_checklist,
+    keyword_gaps: hasPathway && keyword_gaps.length > 0 ? keyword_gaps : undefined,
+    pathway_title: typeof d.pathway_title === 'string' ? d.pathway_title.trim() : undefined,
+  }
+}
+
 function buildBasicUserPrompt(cvText: string): string {
   return `Review this CV in depth — section by section. The user is a career-changer on Capability Navigator. Infer the target region from CV content (spelling, location, terminology). Apply all career-changer diagnostic rules. Return the full JSON report.
 
@@ -368,6 +422,7 @@ export async function POST(req: NextRequest) {
       console.warn('[cv-review] Unexpected jobDescription field; ignoring.')
     }
 
+    let parseAttempts = 0
     const result = await callGeminiJson(
       client,
       getGeminiModel(),
@@ -376,10 +431,16 @@ export async function POST(req: NextRequest) {
         userPrompt,
         temperature: 0.45,
         maxOutputTokens: 8192,
-        timeoutMs: 55_000,
+        timeoutMs: 48_000,
+        totalTimeoutMs: 52_000,
+        maxAttempts: 2,
       },
-      parsed => validateReview(parsed, cvText, hasPathway),
-      3,
+      (parsed) => {
+        parseAttempts++
+        return validateReview(parsed, cvText, hasPathway)
+          ?? (parseAttempts >= 2 ? validateReviewLenient(parsed, cvText, hasPathway) : null)
+      },
+      1,
     )
 
     if (!result.ok) {
