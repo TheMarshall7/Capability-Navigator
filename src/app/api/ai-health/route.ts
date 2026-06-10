@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
-import { getGeminiClient, getGeminiModel, getGeminiModelCandidates } from '@/lib/gemini-client'
+import { getGeminiClient, getGeminiModel, getGeminiModelCandidates, isGeminiModelConfigured } from '@/lib/gemini-client'
 
 export const maxDuration = 30
 
@@ -15,11 +15,13 @@ export async function GET() {
   const hasKey = Boolean(process.env.GEMINI_API_KEY)
   const primaryModel = getGeminiModel()
   const candidates = getGeminiModelCandidates()
+  const modelConfiguredInEnv = isGeminiModelConfigured()
 
   if (!hasKey) {
     return NextResponse.json({
       hasKey: false,
       primaryModel,
+      modelConfiguredInEnv,
       candidates,
       ok: false,
       error: 'GEMINI_API_KEY is not set in this environment',
@@ -31,6 +33,7 @@ export async function GET() {
     return NextResponse.json({
       hasKey: true,
       primaryModel,
+      modelConfiguredInEnv,
       candidates,
       ok: false,
       error: 'Failed to initialise Gemini client',
@@ -51,6 +54,7 @@ export async function GET() {
       return NextResponse.json({
         hasKey: true,
         primaryModel,
+        modelConfiguredInEnv,
         workingModel: model,
         candidates,
         ok: true,
@@ -63,6 +67,7 @@ export async function GET() {
         return NextResponse.json({
           hasKey: true,
           primaryModel,
+          modelConfiguredInEnv,
           candidates,
           ok: false,
           error: error.message || 'All models failed',

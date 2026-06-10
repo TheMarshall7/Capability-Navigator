@@ -61,6 +61,16 @@ function parseGeminiApiError(err: unknown): GeminiApiError {
   }
 }
 
+function isModelNotFoundError(message: string, code?: number | string): boolean {
+  const lower = message.toLowerCase()
+  if (code === 404) return true
+  return (
+    lower.includes('model') && lower.includes('not found')
+  ) || (
+    lower.includes('models/') && lower.includes('not found')
+  ) || lower.includes('is not found for api version')
+}
+
 function classifyApiError(apiError: GeminiApiError): GeminiJsonFailure {
   if (
     apiError.reason === 'API_KEY_INVALID'
@@ -71,11 +81,7 @@ function classifyApiError(apiError: GeminiApiError): GeminiJsonFailure {
   ) {
     return 'api_key'
   }
-  if (
-    apiError.code === 404
-    || apiError.message.toLowerCase().includes('not found')
-    || apiError.message.toLowerCase().includes('is not supported')
-  ) {
+  if (isModelNotFoundError(apiError.message, apiError.code)) {
     return 'model'
   }
   if (
@@ -192,7 +198,13 @@ export async function callGeminiJson<T>(
   return { ok: false, failure: lastFailure, detail: lastDetail }
 }
 
-export function geminiJsonFailureMessage(failure: GeminiJsonFailure): string {
+function sanitizeDetail(detail: string): string {
+  return detail.replace(/AIza[0-9A-Za-z_-]{10,}/g, '[redacted]').slice(0, 200)
+}
+
+export function geminiJsonFailureMessage(failure: GeminiJsonFailure, detail?: string): string {
+  const hint = detail ? ` ${sanitizeDetail(detail)}` : ''
+
   switch (failure) {
     case 'timeout':
       return 'Request timed out. Please try again with shorter text.'
@@ -201,12 +213,12 @@ export function geminiJsonFailureMessage(failure: GeminiJsonFailure): string {
     case 'parse':
       return 'The AI returned an invalid response. Please try again.'
     case 'api_key':
-      return 'AI service unavailable — API key missing or invalid on the server.'
+      return 'AI service unavailable — check GEMINI_API_KEY is valid and unrestricted for server use.'
     case 'quota':
       return 'AI quota exceeded. Please try again later.'
     case 'model':
-      return 'AI model unavailable. Remove GEMINI_MODEL from Vercel env or set it to gemini-2.0-flash.'
+      return `Google AI model unavailable.${hint || ' The app tried gemini-2.5-flash and fallbacks automatically.'}`
     case 'api':
-      return 'AI service error. Please try again in a moment.'
+      return `AI service error.${hint || ' Please try again in a moment.'}`
   }
 }

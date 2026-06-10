@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
       if (result.detail) console.error('[cv-review] Gemini failure:', result.detail)
       const status = result.failure === 'timeout' ? 504 : result.failure === 'api_key' ? 503 : 502
       return NextResponse.json(
-        { error: geminiJsonFailureMessage(result.failure) },
+        { error: geminiJsonFailureMessage(result.failure, result.detail) },
         { status },
       )
     }
