@@ -42,7 +42,7 @@ export default function FeedbackPage() {
   if (done) return (
     <div className="min-h-[60vh] flex flex-col items-center justify-center px-6 text-center">
       <div className="text-6xl mb-5">🙌</div>
-      <h2 className="text-3xl mb-3" style={{ fontFamily: 'var(--font-lora)' }}>Thank you for your feedback</h2>
+      <h2 className="page-title mb-3">Thank you for your feedback</h2>
       <p className="text-[#7A756F] max-w-sm leading-relaxed mb-8">
         This genuinely helps us improve. The goal is for the profile to feel like a human read you — not an algorithm sorted you.
       </p>
@@ -62,8 +62,8 @@ export default function FeedbackPage() {
   })
 
   return (
-    <div className="max-w-[580px] mx-auto px-6 py-12">
-      <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>How did we do?</h1>
+    <div className="page-shell-narrow max-w-[580px]">
+      <h1 className="page-title mb-2">How did we do?</h1>
       <p className="text-[#7A756F] mb-8 leading-relaxed">
         Version 1 success is measured by whether you feel understood — not by job applications. Your honest feedback shapes what gets better.
       </p>

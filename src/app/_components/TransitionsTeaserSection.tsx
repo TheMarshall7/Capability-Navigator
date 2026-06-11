@@ -9,26 +9,21 @@ export default async function TransitionsTeaserSection() {
   const display = isExamples ? EXAMPLE_TRANSITIONS.slice(0, 3) : recent
 
   return (
-    <div style={{ background: '#111009', borderTop: '1px solid rgba(255,255,255,.06)', padding: '80px 32px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-          <div style={{ width: 28, height: 1, background: '#3D8A7A' }} />
-          <span style={{ fontSize: 11, letterSpacing: 2, color: '#3D8A7A', fontWeight: 600 }}>
+    <div className="py-12 sm:py-20 px-4 sm:px-8 border-t border-white/10" style={{ background: '#111009' }}>
+      <div className="max-w-[900px] mx-auto">
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="w-7 h-px bg-[#3D8A7A]" />
+          <span className="text-[11px] tracking-[2px] text-[#3D8A7A] font-semibold">
             {isExamples ? 'EXAMPLE RECORDS' : 'FROM OUR USERS'}
           </span>
         </div>
         <h2
-          style={{
-            fontFamily: 'var(--font-lora), serif',
-            fontSize: 'clamp(28px,4vw,42px)',
-            color: '#FAFAF8',
-            lineHeight: 1.2,
-            marginBottom: 12,
-          }}
+          className="page-title text-[#FAFAF8] leading-tight mb-3"
+          style={{ fontSize: 'clamp(28px,4vw,42px)' }}
         >
           These aren&apos;t predictions. They&apos;re records.
         </h2>
-        <p style={{ fontSize: 15, color: 'rgba(255,255,255,.4)', lineHeight: 1.8, maxWidth: 520, marginBottom: 40 }}>
+        <p className="text-[15px] text-white/40 leading-relaxed max-w-[520px] mb-10">
           Real moves logged by people who made the transition — with timelines and what actually worked.
         </p>
 
@@ -40,17 +35,7 @@ export default async function TransitionsTeaserSection() {
 
         <Link
           href="/transitions"
-          style={{
-            display: 'inline-flex',
-            padding: '12px 24px',
-            background: 'transparent',
-            border: '1.5px solid rgba(255,255,255,.15)',
-            borderRadius: 12,
-            fontSize: 14,
-            fontWeight: 600,
-            color: '#FAFAF8',
-            textDecoration: 'none',
-          }}
+          className="inline-flex px-6 py-3 border border-white/15 rounded-xl text-sm font-semibold text-[#FAFAF8] no-underline hover:border-white/30 transition-colors"
         >
           Browse all transition stories →
         </Link>

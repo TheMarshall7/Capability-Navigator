@@ -38,15 +38,15 @@ export default async function ProfilePage() {
   const name = userData?.name || user.email?.split('@')[0] || 'You'
 
   return (
-    <div className="max-w-[780px] mx-auto px-6 py-10">
+    <div className="page-shell-medium">
       {/* Header */}
-      <div className="flex justify-between items-start flex-wrap gap-4 mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-8">
         <div>
           <Badge color="accent">Capability Profile</Badge>
-          <h1 className="text-3xl mt-3 mb-1" style={{ fontFamily: 'var(--font-lora)' }}>{name}</h1>
+          <h1 className="page-title mt-3 mb-1">{name}</h1>
           <p className="text-[#7A756F]">Generated {new Date(report.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Link href="/share"><Btn variant="outline" size="sm">Share →</Btn></Link>
           <Link href="/pathways"><Btn size="sm">View pathways →</Btn></Link>
         </div>

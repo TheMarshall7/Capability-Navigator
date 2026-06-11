@@ -31,13 +31,13 @@ export default async function PublicProfilePage({ params }: { params: { token: s
   const canReview = shareLink.visibility === 'mentor'
 
   return (
-    <div className="max-w-[720px] mx-auto px-6 py-10">
+    <div className="page-shell-medium max-w-[720px]">
       {/* Header */}
       <div className="mb-8 pb-6 border-b border-[#E8E3DA]">
         <div className="inline-block text-xs font-semibold px-3 py-1 rounded-full bg-[#EBF5F3] text-[#3D8A7A] mb-4">
           {canReview ? 'Mentor Review — Shared with you' : 'Shared Profile'}
         </div>
-        <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>{name}'s Capability Profile</h1>
+        <h1 className="page-title mb-2">{name}'s Capability Profile</h1>
         {canReview && <p className="text-[#7A756F] text-sm leading-relaxed">You've been invited to validate this profile. No account needed.</p>}
       </div>
 

@@ -88,9 +88,9 @@ export default function TransitionReadiness({
         TRANSITION READINESS
       </div>
 
-      <div className="flex items-center gap-5 mb-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5 mb-5">
         <ReadinessRing value={score} />
-        <div>
+        <div className="min-w-0">
           <div className="font-semibold text-[15px] mb-1">Your readiness score</div>
           <p className="text-xs text-[#7A756F] leading-relaxed">
             How positioned you are for your top pathway — based on capability match, roadmap progress, and profile depth.

@@ -9,7 +9,7 @@ export default function HomePage() {
   return (
     <div>
       {/* Hero */}
-      <div style={{ maxWidth: 780, margin: '0 auto', padding: '80px 24px 64px', textAlign: 'center' }}>
+      <div style={{ maxWidth: 780, margin: '0 auto', padding: 'clamp(48px, 12vw, 80px) 16px clamp(40px, 8vw, 64px)', textAlign: 'center' }}>
         <span style={{ background: '#EBF5F3', color: '#3D8A7A', fontSize: 12, fontWeight: 600, padding: '4px 12px', borderRadius: 20, letterSpacing: 0.3 }}>
           Free to use · No CV judgement
         </span>
@@ -32,8 +32,8 @@ export default function HomePage() {
       </div>
 
       {/* Stats bar */}
-      <div style={{ background: '#FFF', borderTop: '1px solid #E8E3DA', borderBottom: '1px solid #E8E3DA', padding: '32px 24px' }}>
-        <div style={{ maxWidth: 780, margin: '0 auto', display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 24, textAlign: 'center' }}>
+      <div style={{ background: '#FFF', borderTop: '1px solid #E8E3DA', borderBottom: '1px solid #E8E3DA', padding: '32px 16px' }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-[780px] mx-auto text-center">
           {[
             ['84%', 'of users said it understood them better than their CV'],
             ['3–5', 'personalised career pathways generated per profile'],
@@ -48,7 +48,7 @@ export default function HomePage() {
       </div>
 
       {/* How it works */}
-      <div style={{ maxWidth: 780, margin: '0 auto', padding: '64px 24px' }}>
+      <div style={{ maxWidth: 780, margin: '0 auto', padding: 'clamp(40px, 8vw, 64px) 16px' }}>
         <h2 style={{ fontFamily: 'var(--font-lora)', fontSize: 32, textAlign: 'center', marginBottom: 8 }}>How it works</h2>
         <p style={{ textAlign: 'center', color: '#7A756F', marginBottom: 48 }}>Four steps. Under 20 minutes. No recruitment process.</p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 20 }}>
@@ -68,7 +68,7 @@ export default function HomePage() {
       </div>
 
       {/* Why CVs fail */}
-      <div style={{ background: '#FFF', borderTop: '1px solid #E8E3DA', borderBottom: '1px solid #E8E3DA', padding: '64px 24px' }}>
+      <div style={{ background: '#FFF', borderTop: '1px solid #E8E3DA', borderBottom: '1px solid #E8E3DA', padding: 'clamp(40px, 8vw, 64px) 16px' }}>
         <div style={{ maxWidth: 680, margin: '0 auto' }}>
           <h2 style={{ fontFamily: 'var(--font-lora)', fontSize: 30, marginBottom: 16 }}>
             CVs show what you&apos;ve done.<br /><em style={{ color: '#E07A5F' }}>Not what you could become.</em>
@@ -87,7 +87,7 @@ export default function HomePage() {
       <TransitionsTeaserSection />
 
       {/* Privacy & final CTA */}
-      <div style={{ background: '#FDF0EA', borderTop: '1px solid #E8E3DA', padding: '64px 24px', textAlign: 'center' }}>
+      <div style={{ background: '#FDF0EA', borderTop: '1px solid #E8E3DA', padding: 'clamp(40px, 8vw, 64px) 16px', textAlign: 'center' }}>
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <h3 style={{ fontFamily: 'var(--font-lora)', fontSize: 26, marginBottom: 12 }}>Privacy and trust</h3>
           <p style={{ color: '#7A756F', lineHeight: 1.8, marginBottom: 28 }}>

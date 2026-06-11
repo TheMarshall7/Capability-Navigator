@@ -78,7 +78,7 @@ export default function BecomeSection() {
       </div>
 
       {/* Scrollable cards */}
-      <div style={{ display: 'flex', gap: 16, padding: '0 32px 48px', overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '100%' }}>
+      <div style={{ display: 'flex', gap: 16, padding: '0 clamp(16px, 4vw, 32px) 48px', overflowX: 'auto', scrollbarWidth: 'none', maxWidth: '100%', WebkitOverflowScrolling: 'touch' }}>
         {TRANSFORMATIONS.map((tr, i) => (
           <div key={i} onClick={() => setActive(i)} style={{
             background: active === i ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.03)',

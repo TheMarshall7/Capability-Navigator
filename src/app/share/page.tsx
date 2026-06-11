@@ -75,8 +75,8 @@ export default function SharePage() {
   ]
 
   return (
-    <div className="max-w-[620px] mx-auto px-6 py-12">
-      <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>Share your profile</h1>
+    <div className="page-shell-narrow">
+      <h1 className="page-title mb-2">Share your profile</h1>
       <p className="text-[#7A756F] mb-8 leading-relaxed">
         Send to a friend, colleague or mentor who knows your work. External validation is one of the most useful things you can collect when exploring a career change.
       </p>

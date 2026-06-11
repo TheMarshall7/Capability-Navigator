@@ -42,7 +42,7 @@ export default function SimilarTransitions({
                 {t.new_role}
               </span>
               {t.time_taken_months != null && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#F8F6F1] text-[#7A756F] ml-auto">
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[#F8F6F1] text-[#7A756F] sm:ml-auto">
                   {t.time_taken_months} mo
                 </span>
               )}

@@ -76,7 +76,7 @@ export default function AuthPage() {
       <div className="w-full max-w-[420px]">
         <div className="text-center mb-8">
           <div className="w-12 h-12 bg-[#FDF0EA] rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl">◎</div>
-          <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>
+          <h1 className="page-title mb-2">
             {mode === 'signup' ? 'Create your profile' : 'Welcome back'}
           </h1>
           <p className="text-[#7A756F]">

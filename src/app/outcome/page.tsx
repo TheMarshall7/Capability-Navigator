@@ -137,12 +137,12 @@ export default function OutcomePage() {
   )
 
   return (
-    <div className="max-w-[600px] mx-auto px-6 py-12">
+    <div className="page-shell-narrow max-w-[600px]">
       <div className="mb-8">
         <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#EBF5F3] text-[#3D8A7A]">
           Transition Tracking
         </span>
-        <h1 className="text-3xl mt-3 mb-2" style={{ fontFamily: 'var(--font-lora)' }}>
+        <h1 className="page-title mt-3 mb-2">
           Did you make the move?
         </h1>
         <p className="text-[#7A756F] leading-relaxed">
@@ -277,9 +277,9 @@ export default function OutcomePage() {
         </div>
       )}
 
-      <div className="flex gap-3 mt-8">
-        <Btn variant="outline" onClick={() => router.push('/dashboard')}>Back</Btn>
-        <Btn onClick={handleSubmit} loading={saving} disabled={!madeTheMove}>
+      <div className="flex flex-col-reverse sm:flex-row gap-3 mt-8">
+        <Btn variant="outline" onClick={() => router.push('/dashboard')} className="w-full sm:w-auto">Back</Btn>
+        <Btn onClick={handleSubmit} loading={saving} disabled={!madeTheMove} className="w-full sm:w-auto">
           {saved ? '✓ Saved' : 'Save outcome'}
         </Btn>
       </div>

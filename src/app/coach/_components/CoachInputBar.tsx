@@ -13,7 +13,7 @@ export default function CoachInputBar({
   input, streaming, inputRef, onInputChange, onSend, onKeyDown,
 }: CoachInputBarProps) {
   return (
-    <div className="border-t border-[#E8E3DA] bg-white px-4 py-4 flex-shrink-0">
+    <div className="border-t border-[#E8E3DA] bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] flex-shrink-0">
       <div className="max-w-[680px] mx-auto flex gap-3 items-end">
         <textarea
           ref={inputRef}

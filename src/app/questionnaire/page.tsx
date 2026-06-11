@@ -170,7 +170,7 @@ export default function QuestionnairePage() {
   const section = SECTIONS[step]
 
   return (
-    <div className="max-w-[620px] mx-auto px-6 py-10">
+    <div className="page-shell-narrow">
       <div className="flex justify-between items-center mb-2">
         <span className="text-sm text-[#7A756F] font-medium">Section {step + 1} of {SECTIONS.length}</span>
         <span className="text-sm text-[#E07A5F] font-semibold">{Math.round((step / SECTIONS.length) * 100)}% complete</span>

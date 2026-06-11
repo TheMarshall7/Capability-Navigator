@@ -18,6 +18,7 @@
 
   body {
     background-color: #F8F6F1;
+    overflow-x: hidden;
   }
 
   ::-webkit-scrollbar {
@@ -63,5 +64,26 @@
   @keyframes pulseSlow {
     0%, 100% { opacity: 1; }
     50%       { opacity: 0.5; }
+  }
+
+  .page-shell {
+    @apply max-w-[900px] mx-auto px-4 sm:px-6 py-8 sm:py-10;
+  }
+
+  .page-shell-wide {
+    @apply max-w-[860px] mx-auto px-4 sm:px-6 py-8 sm:py-10;
+  }
+
+  .page-shell-medium {
+    @apply max-w-[780px] mx-auto px-4 sm:px-6 py-8 sm:py-10;
+  }
+
+  .page-shell-narrow {
+    @apply max-w-[620px] mx-auto px-4 sm:px-6 py-8 sm:py-12;
+  }
+
+  .page-title {
+    @apply text-2xl sm:text-3xl;
+    font-family: var(--font-lora);
   }
 }

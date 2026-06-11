@@ -44,12 +44,12 @@ export default async function TransitionsPage({ searchParams }: PageProps) {
   const filteredEmpty = hasFilters && transitions.length === 0
 
   return (
-    <div className="max-w-[900px] mx-auto px-6 py-10">
+    <div className="page-shell">
       <div className="mb-8">
         <span className="text-xs font-semibold px-3 py-1 rounded-full bg-[#EBF5F3] text-[#3D8A7A]">
           Transition records
         </span>
-        <h1 className="text-3xl mt-3 mb-3" style={{ fontFamily: 'var(--font-lora)' }}>
+        <h1 className="page-title mt-3 mb-3">
           Real transitions, real timelines
         </h1>
         <p className="text-[#7A756F] max-w-xl leading-relaxed">

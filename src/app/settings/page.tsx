@@ -89,8 +89,8 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-[540px] mx-auto px-6 py-12">
-      <h1 className="text-3xl mb-1" style={{ fontFamily: 'var(--font-lora)' }}>Account settings</h1>
+    <div className="page-shell-narrow max-w-[540px]">
+      <h1 className="page-title mb-1">Account settings</h1>
       <p className="text-[#7A756F] mb-8">You are always in control of your profile and data.</p>
 
       {/* Profile */}

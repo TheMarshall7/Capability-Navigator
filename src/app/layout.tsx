@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Lora } from 'next/font/google'
 import Nav from '@/components/layout/Nav'
 import AuthGuard from '@/components/layout/AuthGuard'
@@ -10,6 +10,11 @@ const lora = Lora({ subsets: ['latin'], variable: '--font-lora', display: 'swap'
 export const metadata: Metadata = {
   title: "Capability Navigator — Discover what you're capable of becoming",
   description: "Upload your CV, answer a few questions, and receive an AI-generated capability profile with career pathways and transition steps.",
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

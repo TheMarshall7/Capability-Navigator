@@ -126,8 +126,8 @@ export default function SalaryBridgeSection() {
   }, [])
 
   return (
-    <div ref={ref} style={{ background: '#111009', borderTop: '1px solid rgba(255,255,255,.05)', padding: '100px 0' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 32px' }}>
+    <div ref={ref} style={{ background: '#111009', borderTop: '1px solid rgba(255,255,255,.05)', padding: 'clamp(48px, 10vw, 100px) 0' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 clamp(16px, 4vw, 32px)' }}>
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <div style={{ width: 28, height: 1, background: '#E07A5F' }} />
@@ -141,7 +141,7 @@ export default function SalaryBridgeSection() {
         </p>
 
         {/* Profile tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 40, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 40, flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
           {PROFILES.map((sp, i) => (
             <button key={sp.id} onClick={() => setActive(i)} style={{
               padding: '9px 18px', border: `1px solid ${active === i ? '#E07A5F' : 'rgba(255,255,255,.1)'}`,
@@ -149,7 +149,7 @@ export default function SalaryBridgeSection() {
               background: active === i ? '#E07A5F15' : 'transparent',
               color: active === i ? '#E07A5F' : 'rgba(255,255,255,.4)',
               fontSize: 13, fontWeight: active === i ? 600 : 400,
-              fontFamily: 'var(--font-dm-sans)', transition: 'all .2s',
+              fontFamily: 'var(--font-dm-sans)', transition: 'all .2s', flexShrink: 0,
             }}>
               {sp.emoji} {sp.label}
             </button>

@@ -44,10 +44,10 @@ export default async function PathwaysPage() {
     : [[], []]
 
   return (
-    <div className="max-w-[860px] mx-auto px-6 py-10">
+    <div className="page-shell-wide">
       <div className="mb-8">
         <Badge color="teal">Based on your capability profile</Badge>
-        <h1 className="text-3xl mt-3 mb-3" style={{ fontFamily: 'var(--font-lora)' }}>Your suggested pathways</h1>
+        <h1 className="page-title mt-3 mb-3">Your suggested pathways</h1>
         <p className="text-[#7A756F] max-w-xl leading-relaxed">
           Realistic directions based on your existing capabilities. The overlap percentage shows how much of each role you can already do — not how much you are "worth".
         </p>
@@ -84,7 +84,7 @@ export default async function PathwaysPage() {
               </div>
 
               {evidence && medianMonths != null && (
-                <div className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#EBF5F3] text-[#3D8A7A] border border-[#3D8A7A30]">
+                <div className="mb-4 inline-flex max-w-full items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#EBF5F3] text-[#3D8A7A] border border-[#3D8A7A30] leading-relaxed">
                   ✓ {evidence.transition_count} people made this exact move · median {medianMonths} months
                 </div>
               )}
@@ -128,11 +128,11 @@ export default async function PathwaysPage() {
 
               <div className="flex flex-wrap gap-3">
                 <Link href={`/roadmap/${p.id}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#E07A5F] text-white rounded-xl text-sm font-medium no-underline hover:bg-[#C96848] transition-colors">
+                  className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 bg-[#E07A5F] text-white rounded-xl text-sm font-medium no-underline hover:bg-[#C96848] transition-colors">
                   View full roadmap →
                 </Link>
                 <Link href={`/cv-builder?pathwayId=${p.id}`}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-transparent border border-[#E8E3DA] text-[#2D2926] rounded-xl text-sm font-medium no-underline hover:bg-[#F8F6F1] transition-colors">
+                  className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2 bg-transparent border border-[#E8E3DA] text-[#2D2926] rounded-xl text-sm font-medium no-underline hover:bg-[#F8F6F1] transition-colors">
                   Build a CV for this pathway →
                 </Link>
               </div>

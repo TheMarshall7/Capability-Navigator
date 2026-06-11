@@ -131,8 +131,8 @@ export default function CVUploadPage() {
   }
 
   return (
-    <div className="max-w-[600px] mx-auto px-6 py-12">
-      <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>Upload your CV</h1>
+    <div className="page-shell-narrow max-w-[600px]">
+      <h1 className="page-title mb-2">Upload your CV</h1>
       <p className="text-[#7A756F] mb-8 leading-relaxed">
         Your CV is the starting point — not the whole story. We use it as evidence alongside your questionnaire answers.
       </p>

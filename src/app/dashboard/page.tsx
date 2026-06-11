@@ -117,10 +117,10 @@ export default async function DashboardPage() {
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   return (
-    <div className="max-w-[900px] mx-auto px-6 py-10">
+    <div className="page-shell">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>
+        <h1 className="page-title mb-2">
           {greeting}, {firstName} 👋
         </h1>
         <p className="text-[#7A756F]">

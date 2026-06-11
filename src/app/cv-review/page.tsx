@@ -773,10 +773,10 @@ function CVReviewContent() {
   const visibleTabs = reportTabs.filter(t => t.show)
 
   return (
-    <div className="max-w-[900px] mx-auto px-6 py-10">
+    <div className="page-shell">
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-3xl mb-1" style={{ fontFamily: 'var(--font-lora)' }}>CV review</h1>
+          <h1 className="page-title mb-1">CV review</h1>
           <div className="flex flex-wrap gap-2 items-center">
             {review?.region_inferred && (
               <span className="inline-flex items-center gap-1 text-xs text-[#3D8A7A] bg-[#EBF5F3] px-2.5 py-1 rounded-full">

@@ -5,12 +5,34 @@ import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-browser'
 import { Btn } from '@/components/ui/Btn'
 import type { User } from '@supabase/supabase-js'
+import type { ReactNode } from 'react'
 
 const PROTECTED = ['/dashboard', '/cv-upload', '/cv-review', '/cv-builder', '/questionnaire', '/generating', '/profile', '/pathways', '/roadmap', '/feedback', '/share', '/settings', '/coach', '/outcome']
+
+function NavLink({
+  href,
+  children,
+  onNavigate,
+}: {
+  href: string
+  children: ReactNode
+  onNavigate?: () => void
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      className="flex items-center min-h-[44px] w-full md:w-auto text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline md:min-h-0"
+    >
+      {children}
+    </Link>
+  )
+}
 
 export default function Nav() {
   const [user, setUser] = useState<User | null>(null)
   const [name, setName] = useState('')
+  const [menuOpen, setMenuOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -32,40 +54,75 @@ export default function Nav() {
     return () => subscription.unsubscribe()
   }, [])
 
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [pathname])
+
   const signOut = async () => {
+    setMenuOpen(false)
     await supabase.auth.signOut()
     router.push('/')
   }
 
-  return (
-    <nav className="bg-white border-b border-[#E8E3DA] px-6 flex items-center justify-between h-16 sticky top-0 z-50">
-      <Link href={isAuth ? '/dashboard' : '/'} className="flex items-center gap-2.5 no-underline">
-        <div className="w-8 h-8 bg-[#E07A5F] rounded-lg flex items-center justify-center text-white text-base">◎</div>
-        <span className="text-[17px] font-semibold text-[#2D2926]" style={{ fontFamily: 'var(--font-lora), serif' }}>
-          Capability Navigator
-        </span>
-      </Link>
+  const closeMenu = () => setMenuOpen(false)
 
-      {user && isAuth ? (
-        <div className="flex items-center gap-2">
-          <Link href="/transitions" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Transitions</Link>
-          <Link href="/dashboard" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Dashboard</Link>
-          <Link href="/coach" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Coach</Link>
-          <Link href="/settings" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Settings</Link>
-          <button onClick={signOut} className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 bg-transparent border-none cursor-pointer">
-            Sign out
-          </button>
-          <div className="w-8 h-8 rounded-full bg-[#FDF0EA] flex items-center justify-center text-[#E07A5F] text-sm font-semibold">
-            {(name || user.email || '?')[0].toUpperCase()}
-          </div>
+  const authLinks = user && isAuth ? (
+    <>
+      <NavLink href="/transitions" onNavigate={closeMenu}>Transitions</NavLink>
+      <NavLink href="/dashboard" onNavigate={closeMenu}>Dashboard</NavLink>
+      <NavLink href="/coach" onNavigate={closeMenu}>Coach</NavLink>
+      <NavLink href="/settings" onNavigate={closeMenu}>Settings</NavLink>
+      <button
+        onClick={signOut}
+        className="flex items-center min-h-[44px] w-full md:w-auto text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 bg-transparent border-none cursor-pointer text-left md:min-h-0"
+      >
+        Sign out
+      </button>
+      <div className="hidden md:flex w-8 h-8 rounded-full bg-[#FDF0EA] items-center justify-center text-[#E07A5F] text-sm font-semibold flex-shrink-0">
+        {(name || user.email || '?')[0].toUpperCase()}
+      </div>
+    </>
+  ) : (
+    <>
+      <NavLink href="/transitions" onNavigate={closeMenu}>Transitions</NavLink>
+      <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto px-3 md:px-0">
+        <Btn variant="outline" size="sm" className="w-full md:w-auto" onClick={() => { closeMenu(); router.push('/auth') }}>Log in</Btn>
+        <Btn size="sm" className="w-full md:w-auto" onClick={() => { closeMenu(); router.push('/auth') }}>Get started</Btn>
+      </div>
+    </>
+  )
+
+  return (
+    <nav className="bg-white border-b border-[#E8E3DA] sticky top-0 z-50">
+      <div className="px-4 sm:px-6 flex items-center justify-between h-16">
+        <Link href={isAuth ? '/dashboard' : '/'} className="flex items-center gap-2.5 no-underline min-w-0">
+          <div className="w-8 h-8 bg-[#E07A5F] rounded-lg flex items-center justify-center text-white text-base flex-shrink-0">◎</div>
+          <span className="hidden sm:inline text-[17px] font-semibold text-[#2D2926] truncate" style={{ fontFamily: 'var(--font-lora), serif' }}>
+            Capability Navigator
+          </span>
+        </Link>
+
+        {/* Desktop nav */}
+        <div className="hidden md:flex items-center gap-2">
+          {authLinks}
         </div>
-      ) : (
-        <div className="flex items-center gap-2">
-          <Link href="/transitions" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Transitions</Link>
-          <div className="flex gap-2">
-          <Btn variant="outline" size="sm" onClick={() => router.push('/auth')}>Log in</Btn>
-          <Btn size="sm" onClick={() => router.push('/auth')}>Get started</Btn>
-          </div>
+
+        {/* Mobile menu toggle */}
+        <button
+          type="button"
+          className="md:hidden flex items-center justify-center w-11 h-11 rounded-lg border border-[#E8E3DA] bg-transparent cursor-pointer text-[#2D2926]"
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(o => !o)}
+        >
+          <span className="text-lg leading-none">{menuOpen ? '✕' : '☰'}</span>
+        </button>
+      </div>
+
+      {/* Mobile dropdown */}
+      {menuOpen && (
+        <div className="md:hidden border-t border-[#E8E3DA] bg-white px-2 py-2 flex flex-col">
+          {authLinks}
         </div>
       )}
     </nav>

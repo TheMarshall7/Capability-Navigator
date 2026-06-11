@@ -21,16 +21,16 @@ export default function WeeklyStepWidget() {
     <div className="mb-5 border border-[#E8E3DA] rounded-2xl overflow-hidden">
       <div
         onClick={() => setOpen(o => !o)}
-        className="flex justify-between items-center p-5 cursor-pointer"
+        className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 p-4 sm:p-5 cursor-pointer"
         style={{ background: '#FDF0EA' }}>
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-[#E07A5F] rounded-xl flex items-center justify-center text-white text-sm">◆</div>
-          <div>
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 bg-[#E07A5F] rounded-xl flex items-center justify-center text-white text-sm flex-shrink-0">◆</div>
+          <div className="min-w-0">
             <div className="font-semibold text-[15px]">Your step this week</div>
             <div className="text-sm text-[#7A756F] mt-0.5">{current.title} · {current.effort}</div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-start sm:self-auto flex-shrink-0">
           <span className="text-xs px-2.5 py-1 bg-[#E07A5F] text-white rounded-full font-semibold">Week {doneCount + 1} of 16</span>
           <span className="text-[#7A756F] transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none', display: 'inline-block' }}>↓</span>
         </div>

@@ -25,8 +25,8 @@ export default function TransitionFilters({
   }
 
   return (
-    <div className="flex flex-wrap gap-4 items-end">
-      <div>
+    <div className="flex flex-col sm:flex-row sm:flex-wrap gap-4 sm:items-end">
+      <div className="w-full sm:w-auto">
         <label htmlFor="filter-from" className="block text-xs font-semibold text-[#7A756F] mb-1.5 uppercase tracking-wide">
           From
         </label>
@@ -34,7 +34,7 @@ export default function TransitionFilters({
           id="filter-from"
           value={currentFrom}
           onChange={e => apply(e.target.value, currentTo)}
-          className="px-4 py-2.5 border border-[#E8E3DA] rounded-xl text-sm bg-white text-[#2D2926] min-w-[180px] outline-none focus:border-[#E07A5F]"
+          className="w-full sm:min-w-[180px] px-4 py-2.5 border border-[#E8E3DA] rounded-xl text-sm bg-white text-[#2D2926] outline-none focus:border-[#E07A5F]"
         >
           <option value="">All roles</option>
           {fromRoles.map(r => (
@@ -42,7 +42,7 @@ export default function TransitionFilters({
           ))}
         </select>
       </div>
-      <div>
+      <div className="w-full sm:w-auto">
         <label htmlFor="filter-to" className="block text-xs font-semibold text-[#7A756F] mb-1.5 uppercase tracking-wide">
           To
         </label>
@@ -50,7 +50,7 @@ export default function TransitionFilters({
           id="filter-to"
           value={currentTo}
           onChange={e => apply(currentFrom, e.target.value)}
-          className="px-4 py-2.5 border border-[#E8E3DA] rounded-xl text-sm bg-white text-[#2D2926] min-w-[180px] outline-none focus:border-[#E07A5F]"
+          className="w-full sm:min-w-[180px] px-4 py-2.5 border border-[#E8E3DA] rounded-xl text-sm bg-white text-[#2D2926] outline-none focus:border-[#E07A5F]"
         >
           <option value="">All roles</option>
           {toRoles.map(r => (

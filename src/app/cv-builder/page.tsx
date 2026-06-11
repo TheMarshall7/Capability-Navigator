@@ -436,12 +436,12 @@ function CVBuilderContent() {
   const selectedPathway = pathways.find(p => p.id === pathwayId)
 
   return (
-    <div className="max-w-[900px] mx-auto px-6 py-10">
+    <div className="page-shell">
       {generating && generatingPhase > 0 && (
         <CvBuilderGenerationProgress phase={generatingPhase} />
       )}
       <div className="mb-8">
-        <h1 className="text-3xl mb-2" style={{ fontFamily: 'var(--font-lora)' }}>CV Builder</h1>
+        <h1 className="page-title mb-2">CV Builder</h1>
         <p className="text-[#7A756F] text-sm leading-relaxed">
           Hybrid career-change format — ATS-optimised, regionally correct, with a cover letter.
         </p>

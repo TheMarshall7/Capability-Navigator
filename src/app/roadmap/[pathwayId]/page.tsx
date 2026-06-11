@@ -65,14 +65,14 @@ export default async function RoadmapPage({ params }: { params: { pathwayId: str
   const r = normalizeRoadmap(pathway.roadmap_json)
 
   return (
-    <div className="max-w-[780px] mx-auto px-6 py-10">
+    <div className="page-shell-medium">
       <Link href="/pathways" className="text-sm text-[#7A756F] hover:text-[#2D2926] no-underline mb-5 inline-block">
         ← Back to pathways
       </Link>
 
       <div className="mb-8">
         <Badge color="teal">Transition Roadmap</Badge>
-        <h1 className="text-3xl mt-3 mb-2" style={{ fontFamily: 'var(--font-lora)' }}>
+        <h1 className="page-title mt-3 mb-2">
           Becoming a {pathway.title}
         </h1>
         <p className="text-[#7A756F]">{pathway.estimated_transition_time} · {pathway.difficulty} difficulty · {pathway.capability_overlap}% capability overlap</p>

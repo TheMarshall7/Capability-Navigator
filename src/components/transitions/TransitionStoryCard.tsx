@@ -26,7 +26,7 @@ export default function TransitionStoryCard({ transition, variant = 'light' }: T
           {transition.original_role} →
         </div>
         <div
-          className="text-xl font-semibold leading-tight"
+          className="text-xl font-semibold leading-tight break-words"
           style={{ fontFamily: 'var(--font-lora)', color: dark ? '#FAFAF8' : '#2D2926' }}
         >
           {transition.new_role}
