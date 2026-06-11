@@ -130,6 +130,9 @@ export default async function DashboardPage() {
         </p>
       </div>
 
+      {/* Weekly step widget — primary CTA, above profile completion */}
+      <WeeklyStepWidget />
+
       {/* Progress */}
       <Card className="mb-5 !p-5">
         <div className="flex justify-between items-center mb-3">
@@ -268,9 +271,6 @@ export default async function DashboardPage() {
           </div>
         </Card>
       )}
-
-      {/* Weekly step widget */}
-      <WeeklyStepWidget />
 
       {/* Quick actions */}
       <Card className="!p-5">
