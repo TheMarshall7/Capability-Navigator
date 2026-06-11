@@ -3,6 +3,7 @@ import dynamic from 'next/dynamic'
 
 const BecomeSection = dynamic(() => import('./_components/BecomeSection'))
 const SalaryBridgeSection = dynamic(() => import('./_components/SalaryBridgeSection'))
+const TransitionsTeaserSection = dynamic(() => import('./_components/TransitionsTeaserSection'))
 
 export default function HomePage() {
   return (
@@ -83,6 +84,7 @@ export default function HomePage() {
 
       <BecomeSection />
       <SalaryBridgeSection />
+      <TransitionsTeaserSection />
 
       {/* Privacy & final CTA */}
       <div style={{ background: '#FDF0EA', borderTop: '1px solid #E8E3DA', padding: '64px 24px', textAlign: 'center' }}>

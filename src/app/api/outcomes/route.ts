@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
           what_worked: body.what_worked || null,
           what_didnt: body.what_didnt || null,
           would_recommend: body.would_recommend ?? null,
+          is_public: body.is_public === true,
+          headline: body.headline || null,
           updated_at: new Date().toISOString(),
         },
         { onConflict: 'user_id' }

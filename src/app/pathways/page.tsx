@@ -4,6 +4,13 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase-server'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
+import {
+  getSimilarTransitions,
+  getTransitionStats,
+  matchPathwayStat,
+  parseQuestionnaireRole,
+} from '@/lib/transitions'
+import SimilarTransitions from '@/components/transitions/SimilarTransitions'
 
 function DifficultyDot({ d }: { d: string }) {
   const colors: Record<string, string> = { Low: '#3D8A7A', Medium: '#E8A838', High: '#E07A5F' }
@@ -15,13 +22,26 @@ export default async function PathwaysPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const { data: pathways } = await supabase
-    .from('career_pathways')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('capability_overlap', { ascending: false })
+  const [
+    { data: pathways },
+    { data: roleAnswer },
+  ] = await Promise.all([
+    supabase.from('career_pathways').select('*').eq('user_id', user.id)
+      .order('capability_overlap', { ascending: false }),
+    supabase.from('questionnaire_answers').select('answer_value')
+      .eq('user_id', user.id).eq('question_key', 'role').maybeSingle(),
+  ])
 
   if (!pathways || pathways.length === 0) redirect('/generating')
+
+  const userRole = parseQuestionnaireRole(roleAnswer?.answer_value)
+
+  const [similarTransitions, transitionStats] = userRole
+    ? await Promise.all([
+        getSimilarTransitions(userRole, 3),
+        getTransitionStats(userRole),
+      ])
+    : [[], []]
 
   return (
     <div className="max-w-[860px] mx-auto px-6 py-10">
@@ -33,9 +53,20 @@ export default async function PathwaysPage() {
         </p>
       </div>
 
+      <SimilarTransitions
+        transitions={similarTransitions}
+        userRole={userRole}
+        variant="pathways"
+      />
+
       <div className="flex flex-col gap-5">
         {pathways.map((p, i) => {
           const missing: string[] = p.missing_skills_json || []
+          const evidence = matchPathwayStat(transitionStats, userRole, p.title)
+          const medianMonths = evidence?.median_months != null
+            ? Math.round(evidence.median_months)
+            : null
+
           return (
             <Card key={p.id} className="!border-l-4" style={{ borderLeftColor: i === 0 ? '#E07A5F' : '#E8E3DA' }}>
               <div className="flex justify-between items-start flex-wrap gap-3 mb-4">
@@ -51,6 +82,12 @@ export default async function PathwaysPage() {
                   <div className="text-xs text-[#7A756F]">current overlap</div>
                 </div>
               </div>
+
+              {evidence && medianMonths != null && (
+                <div className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#EBF5F3] text-[#3D8A7A] border border-[#3D8A7A30]">
+                  ✓ {evidence.transition_count} people made this exact move · median {medianMonths} months
+                </div>
+              )}
 
               {/* Progress bar */}
               <div className="bg-[#E8E3DA] rounded-full h-1.5 mb-4 overflow-hidden">

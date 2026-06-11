@@ -10,4 +10,5 @@ export const COACH_STARTERS = [
   "How do I explain my career change to employers?",
   "I'm struggling to find time to work on this. Help.",
   "Should I apply for jobs now or wait until I have more experience?",
+  "How long did this move take for people like me?",
 ]

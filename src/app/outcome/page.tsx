@@ -26,6 +26,8 @@ export default function OutcomePage() {
   const [whatWorked, setWhatWorked] = useState('')
   const [whatDidnt, setWhatDidnt] = useState('')
   const [wouldRecommend, setWouldRecommend] = useState<boolean | null>(null)
+  const [isPublic, setIsPublic] = useState(false)
+  const [headline, setHeadline] = useState('')
 
   const router = useRouter()
   const supabase = createClient()
@@ -54,6 +56,8 @@ export default function OutcomePage() {
           setWhatWorked(existing.what_worked || '')
           setWhatDidnt(existing.what_didnt || '')
           setWouldRecommend(existing.would_recommend ?? null)
+          setIsPublic(existing.is_public ?? false)
+          setHeadline(existing.headline || '')
         }
       } catch (err) {
         setError('Failed to load your outcome data.')
@@ -84,6 +88,8 @@ export default function OutcomePage() {
           what_worked: whatWorked || null,
           what_didnt: whatDidnt || null,
           would_recommend: wouldRecommend,
+          is_public: madeTheMove === 'yes' ? isPublic : false,
+          headline: madeTheMove === 'yes' && isPublic ? (headline || null) : null,
         }),
       })
 
@@ -231,6 +237,36 @@ export default function OutcomePage() {
               {pill('true', wouldRecommend?.toString() ?? '', 'Yes', () => setWouldRecommend(true))}
               {pill('false', wouldRecommend?.toString() ?? '', 'No', () => setWouldRecommend(false))}
             </div>
+          </div>
+        )}
+
+        {/* Public sharing opt-in — only when move completed */}
+        {madeTheMove === 'yes' && (
+          <div className="p-4 rounded-xl border border-[#E8E3DA] bg-[#F8F6F1]">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isPublic}
+                onChange={e => setIsPublic(e.target.checked)}
+                className="mt-1 accent-[#3D8A7A]"
+              />
+              <div>
+                <span className="font-medium text-[15px] block mb-1">Share my story anonymously to help others</span>
+                <span className="text-xs text-[#7A756F] leading-relaxed">
+                  Your name and details are never shown. Only the move, the timeline, and what worked.
+                </span>
+              </div>
+            </label>
+            {isPublic && (
+              <div className="mt-4 pl-7">
+                <input
+                  value={headline}
+                  onChange={e => setHeadline(e.target.value)}
+                  placeholder="Sum up your move in one line (optional)"
+                  className="w-full px-4 py-3 border border-[#E8E3DA] rounded-xl text-sm outline-none focus:border-[#E07A5F] transition-colors bg-white"
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

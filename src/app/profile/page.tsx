@@ -6,22 +6,32 @@ import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { Btn } from '@/components/ui/Btn'
 import type { CoreCapability, HiddenStrength } from '@/types'
+import { getSimilarTransitions, parseQuestionnaireRole } from '@/lib/transitions'
+import SimilarTransitions from '@/components/transitions/SimilarTransitions'
 
 export default async function ProfilePage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth')
 
-  const { data: userData } = await supabase.from('users').select('name, email').eq('id', user.id).single()
-  const { data: report } = await supabase
-    .from('capability_reports')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+  const [
+    { data: userData },
+    { data: report },
+    { data: roleAnswer },
+  ] = await Promise.all([
+    supabase.from('users').select('name, email').eq('id', user.id).single(),
+    supabase.from('capability_reports').select('*').eq('user_id', user.id)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle(),
+    supabase.from('questionnaire_answers').select('answer_value')
+      .eq('user_id', user.id).eq('question_key', 'role').maybeSingle(),
+  ])
 
   if (!report) redirect('/generating')
+
+  const userRole = parseQuestionnaireRole(roleAnswer?.answer_value)
+  const similarTransitions = userRole
+    ? await getSimilarTransitions(userRole, 3)
+    : []
 
   const capabilities: CoreCapability[] = report.core_capabilities_json || []
   const hiddenStrengths: HiddenStrength[] = report.hidden_strengths_json || []
@@ -84,6 +94,12 @@ export default async function ProfilePage() {
           </div>
         </Card>
       )}
+
+      <SimilarTransitions
+        transitions={similarTransitions}
+        userRole={userRole}
+        variant="profile"
+      />
 
       {/* Work style + CV underrep */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">

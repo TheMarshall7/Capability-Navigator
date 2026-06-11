@@ -4,9 +4,14 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase-server'
 import { Card } from '@/components/ui/Card'
-import { Badge } from '@/components/ui/Badge'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { Btn } from '@/components/ui/Btn'
+import {
+  computeReadiness,
+  getReadinessBottleneck,
+  getReadinessDelta,
+} from '@/lib/readiness'
+import TransitionReadiness from './TransitionReadiness'
 
 const CareerVelocity = dynamic(() => import('./CareerVelocity'))
 const WeeklyStepWidget = dynamic(() => import('./WeeklyStepWidget'))
@@ -26,6 +31,8 @@ export default async function DashboardPage() {
     { data: feedbackData },
     { data: shareData },
     { data: outcomeData },
+    { data: allMilestones },
+    { data: readinessSnapshots },
   ] = await Promise.all([
     supabase.from('users').select('name, email').eq('id', user.id).single(),
     supabase.from('cv_uploads').select('id, file_name, created_at').eq('user_id', user.id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
@@ -35,6 +42,8 @@ export default async function DashboardPage() {
     supabase.from('feedback').select('id').eq('user_id', user.id).limit(1).maybeSingle(),
     supabase.from('share_links').select('id').eq('user_id', user.id).limit(1).maybeSingle(),
     supabase.from('outcomes').select('made_the_move').eq('user_id', user.id).maybeSingle(),
+    supabase.from('milestones').select('completed, pathway_id').eq('user_id', user.id),
+    supabase.from('readiness_snapshots').select('score, created_at').eq('user_id', user.id).order('created_at', { ascending: true }),
   ])
 
   const name = userData?.name || user.email?.split('@')[0] || 'there'
@@ -52,6 +61,56 @@ export default async function DashboardPage() {
   ]
   const completedSteps = steps.filter(s => s.done).length
   const completionPct = Math.round((completedSteps / steps.length) * 100)
+
+  const pathwayMilestones = pathwaysData?.id
+    ? (allMilestones ?? []).filter(m => m.pathway_id === pathwaysData.id)
+    : []
+  const milestonesCompleted = pathwayMilestones.filter(m => m.completed).length
+  const milestonesTotal = pathwayMilestones.length
+
+  let readinessWidget: {
+    score: number
+    components: ReturnType<typeof computeReadiness>['components']
+    delta: number | null
+    bottleneckLabel: string
+    bottleneckHref: string
+  } | null = null
+
+  if (reportData) {
+    const readiness = computeReadiness({
+      capabilityOverlap: pathwaysData?.capability_overlap ?? 0,
+      milestonesCompleted,
+      milestonesTotal,
+      hasCv: !!cvData,
+      questionnaireDone: questionnaireComplete,
+      feedbackGiven: !!feedbackData,
+    })
+
+    const snapshots = readinessSnapshots ?? []
+    const latestSnapshot = snapshots[snapshots.length - 1]
+    if (!latestSnapshot || latestSnapshot.score !== readiness.score) {
+      await supabase.from('readiness_snapshots').insert({
+        user_id: user.id,
+        score: readiness.score,
+        components_json: readiness.components,
+      })
+    }
+
+    const delta = getReadinessDelta(snapshots, readiness.score)
+    const bottleneck = getReadinessBottleneck(
+      readiness.components,
+      pathwaysData?.id,
+      { cv: !cvData, questionnaire: !questionnaireComplete, feedback: !feedbackData },
+    )
+
+    readinessWidget = {
+      score: readiness.score,
+      components: readiness.components,
+      delta,
+      bottleneckLabel: bottleneck.label,
+      bottleneckHref: bottleneck.href,
+    }
+  }
 
   const firstName = name.split(' ')[0]
   const hour = new Date().getHours()
@@ -90,8 +149,19 @@ export default async function DashboardPage() {
         </div>
       </Card>
 
-      {/* Career velocity widget */}
-      <CareerVelocity />
+      {/* Career velocity + readiness widgets */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-5">
+        <CareerVelocity />
+        {readinessWidget && (
+          <TransitionReadiness
+            score={readinessWidget.score}
+            components={readinessWidget.components}
+            delta={readinessWidget.delta}
+            bottleneckLabel={readinessWidget.bottleneckLabel}
+            bottleneckHref={readinessWidget.bottleneckHref}
+          />
+        )}
+      </div>
 
       {/* CV Review — shown when CV uploaded */}
       {cvData && (

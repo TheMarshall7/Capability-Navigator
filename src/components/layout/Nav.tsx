@@ -48,6 +48,7 @@ export default function Nav() {
 
       {user && isAuth ? (
         <div className="flex items-center gap-2">
+          <Link href="/transitions" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Transitions</Link>
           <Link href="/dashboard" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Dashboard</Link>
           <Link href="/coach" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Coach</Link>
           <Link href="/settings" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Settings</Link>
@@ -59,9 +60,12 @@ export default function Nav() {
           </div>
         </div>
       ) : (
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          <Link href="/transitions" className="text-sm text-[#7A756F] hover:text-[#2D2926] px-3 py-2 no-underline">Transitions</Link>
+          <div className="flex gap-2">
           <Btn variant="outline" size="sm" onClick={() => router.push('/auth')}>Log in</Btn>
           <Btn size="sm" onClick={() => router.push('/auth')}>Get started</Btn>
+          </div>
         </div>
       )}
     </nav>

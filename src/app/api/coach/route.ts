@@ -3,23 +3,67 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { rateLimit } from '@/lib/rate-limit'
 import { getGeminiClient, getGeminiModel } from '@/lib/gemini-client'
+import {
+  getTransitionStats,
+  getSimilarTransitions,
+  parseQuestionnaireRole,
+  truncateExcerpt,
+  type PublicTransition,
+  type TransitionStat,
+} from '@/lib/transitions'
 
 // 20 messages per user per hour
 const RATE_LIMIT = 20
 const WINDOW_MS = 60 * 60 * 1000
+
+function buildPlatformDataSection(
+  userRole: string,
+  pathwayTitle: string,
+  stat: TransitionStat | null,
+  similar: PublicTransition[],
+): string {
+  const pathwayNorm = pathwayTitle.trim().toLowerCase()
+  const excerpts = similar
+    .filter(t => t.what_worked && (!pathwayTitle || t.new_role.trim().toLowerCase() === pathwayNorm))
+    .slice(0, 3)
+    .map(t => truncateExcerpt(t.what_worked, 150))
+
+  if (stat && stat.transition_count > 0) {
+    const median = stat.median_months != null ? Math.round(stat.median_months) : 'unknown'
+    let section = `PLATFORM TRANSITION DATA (real, from our users — cite this when relevant):
+- ${stat.transition_count} people on this platform moved from ${userRole || stat.original_role} to ${pathwayTitle || stat.new_role}. Median time: ${median} months.`
+    if (excerpts.length > 0) {
+      section += `\n- What they said worked: ${excerpts.map(e => `"${e}"`).join('; ')}`
+    }
+    return section
+  }
+
+  return `PLATFORM TRANSITION DATA (real, from our users — cite this when relevant):
+- No platform data exists yet for this exact transition.`
+}
 
 function buildSystemPrompt(data: {
   name: string
   report: any
   topPathway: any
   milestoneProgress: { completed: number; total: number }
+  userRole: string
+  transitionStat: TransitionStat | null
+  similarTransitions: PublicTransition[]
 }): string {
-  const { name, report, topPathway, milestoneProgress } = data
+  const { name, report, topPathway, milestoneProgress, userRole, transitionStat, similarTransitions } = data
   const capabilities = (report.core_capabilities_json || []).map((c: any) => c.title).join(', ')
   const strengths = (report.hidden_strengths_json || []).map((h: any) => h.title).join(', ')
   const pct = milestoneProgress.total > 0
     ? Math.round((milestoneProgress.completed / milestoneProgress.total) * 100)
     : 0
+
+  const platformData = buildPlatformDataSection(
+    userRole,
+    topPathway?.title || '',
+    transitionStat,
+    similarTransitions,
+  )
 
   return `You are a personal career transition coach helping ${name} make a career change.
 
@@ -28,6 +72,7 @@ THEIR PROFILE:
 - Core capabilities: ${capabilities || 'Not yet generated'}
 - Hidden strengths: ${strengths || 'Not yet generated'}
 - Work style: ${report.work_style_summary || 'Not available'}
+- Current role: ${userRole || 'Not provided'}
 
 TARGET PATHWAY:
 - Title: ${topPathway?.title || 'Not yet selected'}
@@ -38,6 +83,8 @@ TARGET PATHWAY:
 THEIR PROGRESS:
 - Milestones completed: ${milestoneProgress.completed} of ${milestoneProgress.total} (${pct}%)
 
+${platformData}
+
 YOUR ROLE:
 - Give specific, actionable advice grounded in their actual capabilities — never generic career advice
 - Reference their specific strengths when relevant
@@ -45,11 +92,14 @@ YOUR ROLE:
 - Ask one focused follow-up question at a time to understand where they're stuck
 - Tone: warm, direct, like a smart friend who knows career transitions deeply
 
+When platform transition data is provided above, ground any timeline, difficulty, or feasibility claims in it and say the numbers come from real users of this platform. When NO platform data is provided, you MUST say so plainly ('we don't have platform data on this exact move yet') before giving your best general guidance — never imply general knowledge is platform data, and never invent counts, success rates, or timelines.
+
 NEVER:
 - Give advice that ignores their specific profile
 - Use corporate language or excessive enthusiasm
 - Overwhelm with too many options at once
-- Pretend you know things you don't — say so if you're uncertain`
+- Pretend you know things you don't — say so if you're uncertain
+- Invent transition counts, timelines, or success rates when no platform data is provided`
 }
 
 function buildFallbackReply(data: {
@@ -96,13 +146,32 @@ export async function POST(req: NextRequest) {
       { data: userData },
       { data: report },
       { data: topPathway },
+      { data: roleAnswer },
     ] = await Promise.all([
       supabase.from('users').select('name').eq('id', user.id).single(),
       supabase.from('capability_reports').select('*').eq('user_id', user.id)
         .order('created_at', { ascending: false }).limit(1).maybeSingle(),
       supabase.from('career_pathways').select('*').eq('user_id', user.id)
         .order('capability_overlap', { ascending: false }).limit(1).maybeSingle(),
+      supabase.from('questionnaire_answers').select('answer_value')
+        .eq('user_id', user.id).eq('question_key', 'role').maybeSingle(),
     ])
+
+    const userRole = parseQuestionnaireRole(roleAnswer?.answer_value)
+    const pathwayTitle = topPathway?.title || ''
+
+    const [transitionStats, similarTransitions] = userRole
+      ? await Promise.all([
+          getTransitionStats(userRole, pathwayTitle || undefined),
+          getSimilarTransitions(userRole, 3),
+        ])
+      : [[], []]
+
+    const transitionStat = pathwayTitle
+      ? transitionStats.find(
+          s => s.new_role.trim().toLowerCase() === pathwayTitle.trim().toLowerCase(),
+        ) ?? null
+      : null
 
     // Milestone progress for context
     const { data: milestones } = topPathway
@@ -161,6 +230,9 @@ export async function POST(req: NextRequest) {
       report: report || {},
       topPathway,
       milestoneProgress,
+      userRole,
+      transitionStat,
+      similarTransitions,
     })
 
     // Stream the response
